@@ -2,6 +2,19 @@
 
 WordPress plugin for managing automatic updates of plugins across multiple WordPress sites from specified web or GitHub repository sources.
 
+[![License](https://img.shields.io/badge/license-GPL--2.0%2B-blue.svg)](https://www.gnu.org/licenses/gpl-2.0.html)
+[![WordPress](https://img.shields.io/badge/wordpress-5.0%2B-blue.svg)](https://wordpress.org/)
+[![PHP](https://img.shields.io/badge/php-7.2%2B-purple.svg)](https://www.php.net/)
+
+## Quick Start
+
+1. **Install**: Upload plugin to `/wp-content/plugins/` and activate
+2. **Add Site**: Go to Update Controller > Sites and add your WordPress site credentials
+3. **Configure Plugin**: Go to Update Controller > Plugins and specify which plugins to update and from where
+4. **Update**: Click "Update Now" or let automatic updates run daily
+
+📖 **[See detailed examples](EXAMPLES.md)** | 🇹🇷 **[Türkçe README](README-TR.md)** | 🎨 **[UI Guide](UI-GUIDE.md)**
+
 ## Features
 
 - Manage multiple WordPress sites from a single dashboard
