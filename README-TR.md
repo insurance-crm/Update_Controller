@@ -13,9 +13,22 @@ WordPress sitelerindeki eklentileri web veya GitHub repository kaynaklarından o
 
 ## Kurulum
 
+### Ana Eklenti (Kontrol Sitesi)
+
 1. `update-controller` klasörünü `/wp-content/plugins/` dizinine yükleyin
 2. Eklentiyi WordPress'teki 'Eklentiler' menüsünden etkinleştirin
 3. Yönetici menüsünde 'Update Controller'a gidin
+
+### Yardımcı Eklenti (Hedef Siteler)
+
+**Önemli**: Uzaktan güncellemek istediğiniz her WordPress sitesine kurulmalıdır!
+
+1. `companion-plugin/update-controller-companion.php` dosyasını kopyalayın
+2. Her hedef sitede `/wp-content/plugins/update-controller-companion/` dizinine yükleyin
+3. Her hedef sitede 'Eklentiler' menüsünden etkinleştirin
+4. Kimlik doğrulama için Uygulama Şifrelerini yapılandırın
+
+Detaylı talimatlar için [companion-plugin/README.md](companion-plugin/README.md) dosyasına bakın.
 
 ## Kullanım
 

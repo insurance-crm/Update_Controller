@@ -8,12 +8,21 @@ WordPress plugin for managing automatic updates of plugins across multiple WordP
 
 ## Quick Start
 
-1. **Install**: Upload plugin to `/wp-content/plugins/` and activate
-2. **Add Site**: Go to Update Controller > Sites and add your WordPress site credentials
-3. **Configure Plugin**: Go to Update Controller > Plugins and specify which plugins to update and from where
-4. **Update**: Click "Update Now" or let automatic updates run daily
+1. **Install Controller**: Upload plugin to `/wp-content/plugins/` and activate
+2. **Install Companion**: Install the companion plugin on all target WordPress sites (see `companion-plugin/` folder)
+3. **Add Site**: Go to Update Controller > Sites and add your WordPress site credentials
+4. **Configure Plugin**: Go to Update Controller > Plugins and specify which plugins to update and from where
+5. **Update**: Click "Update Now" or let automatic updates run daily
 
 📖 **[See detailed examples](EXAMPLES.md)** | 🇹🇷 **[Türkçe README](README-TR.md)** | 🎨 **[UI Guide](UI-GUIDE.md)**
+
+## Important: Companion Plugin Required
+
+**Target WordPress sites must have the companion plugin installed!**
+
+The companion plugin (`companion-plugin/update-controller-companion.php`) provides REST API endpoints for remote plugin management. Install it on each WordPress site you want to update remotely.
+
+See [companion-plugin/README.md](companion-plugin/README.md) for installation instructions.
 
 ## Features
 
@@ -26,9 +35,22 @@ WordPress plugin for managing automatic updates of plugins across multiple WordP
 
 ## Installation
 
+### Main Plugin (Controller Site)
+
 1. Upload the `update-controller` folder to the `/wp-content/plugins/` directory
 2. Activate the plugin through the 'Plugins' menu in WordPress
 3. Navigate to 'Update Controller' in the admin menu
+
+### Companion Plugin (Target Sites)
+
+**Important**: Install this on every WordPress site you want to update remotely!
+
+1. Copy the `companion-plugin/update-controller-companion.php` file
+2. Upload to `/wp-content/plugins/update-controller-companion/` on each target site
+3. Activate through the 'Plugins' menu on each target site
+4. Configure Application Passwords for authentication
+
+See [companion-plugin/README.md](companion-plugin/README.md) for detailed instructions.
 
 ## Usage
 

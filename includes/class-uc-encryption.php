@@ -12,6 +12,9 @@ class UC_Encryption {
     
     /**
      * Get encryption key
+     * 
+     * IMPORTANT: This function uses WordPress AUTH_KEY for encryption.
+     * Ensure AUTH_KEY is properly set in wp-config.php and not the default value.
      */
     private static function get_key() {
         // Use WordPress authentication unique key and salt
@@ -19,7 +22,9 @@ class UC_Encryption {
             return AUTH_KEY;
         }
         
-        // Fallback key (should be replaced with proper key)
+        // Fallback key - This should never be used in production
+        // If you see this warning, configure AUTH_KEY in wp-config.php
+        error_log('Update Controller: AUTH_KEY is not properly configured. Please set a unique AUTH_KEY in wp-config.php for secure password encryption.');
         return 'update-controller-default-key';
     }
     
@@ -35,7 +40,7 @@ class UC_Encryption {
         $method = 'AES-256-CBC';
         
         // Generate an initialization vector
-        $iv = openssl_random_pseudo_bytes(openssl_cipher_iv_length($method));
+        $iv = random_bytes(openssl_cipher_iv_length($method));
         
         // Encrypt the data
         $encrypted = openssl_encrypt($data, $method, $key, 0, $iv);

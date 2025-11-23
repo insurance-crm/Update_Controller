@@ -219,6 +219,9 @@ class UC_Updater {
     
     /**
      * Upload plugin file to remote site
+     * 
+     * Uploads the plugin ZIP file to the remote site's media library.
+     * The companion plugin will use this file for installation.
      */
     private static function upload_plugin_file($site_url, $file_path, $auth_headers) {
         $site_url = rtrim($site_url, '/');
@@ -227,7 +230,7 @@ class UC_Updater {
         $file_content = file_get_contents($file_path);
         $file_name = basename($file_path);
         
-        // Upload via REST API
+        // Upload via REST API to media library
         $response = wp_remote_post($site_url . '/wp-json/wp/v2/media', array(
             'headers' => array_merge($auth_headers, array(
                 'Content-Disposition' => 'attachment; filename=' . $file_name,
@@ -252,26 +255,68 @@ class UC_Updater {
     
     /**
      * Install plugin from uploaded file
+     * 
+     * Uses the Update Controller Companion plugin's REST API endpoint
+     * to install/update the plugin on the remote site.
      */
     private static function install_plugin_from_upload($site_url, $upload_data, $auth_headers) {
         $site_url = rtrim($site_url, '/');
         
-        // This would typically use a custom REST API endpoint on the remote site
-        // For now, we'll return a success indicator
-        // In production, you'd need to implement a custom endpoint on the target WordPress site
+        if (!isset($upload_data['id'])) {
+            return new WP_Error('invalid_upload', __('Invalid upload data', 'update-controller'));
+        }
         
-        return array('success' => true);
+        // Call the companion plugin's install endpoint
+        $response = wp_remote_post($site_url . '/wp-json/uc-companion/v1/install-plugin', array(
+            'headers' => $auth_headers,
+            'body' => array(
+                'file_id' => $upload_data['id']
+            ),
+            'timeout' => 120
+        ));
+        
+        if (is_wp_error($response)) {
+            return $response;
+        }
+        
+        $code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        
+        if ($code !== 200) {
+            $message = isset($body['message']) ? $body['message'] : __('Plugin installation failed', 'update-controller');
+            return new WP_Error('install_failed', $message);
+        }
+        
+        return $body;
     }
     
     /**
      * Toggle plugin activation status
+     * 
+     * Uses the Update Controller Companion plugin's REST API endpoints
+     * to activate or deactivate the plugin on the remote site.
      */
     private static function toggle_plugin($site_url, $plugin_slug, $action, $auth_headers) {
         $site_url = rtrim($site_url, '/');
         
-        // This would typically use WordPress REST API or a custom endpoint
-        // The actual implementation depends on the target site's capabilities
+        $endpoint = $action === 'activate' ? 'activate-plugin' : 'deactivate-plugin';
         
-        return true;
+        $response = wp_remote_post($site_url . '/wp-json/uc-companion/v1/' . $endpoint, array(
+            'headers' => $auth_headers,
+            'body' => array(
+                'plugin_slug' => $plugin_slug
+            ),
+            'timeout' => 60
+        ));
+        
+        if (is_wp_error($response)) {
+            // Log error but don't fail the update
+            error_log('Update Controller: Plugin ' . $action . ' failed: ' . $response->get_error_message());
+            return false;
+        }
+        
+        $code = wp_remote_retrieve_response_code($response);
+        
+        return $code === 200;
     }
 }
