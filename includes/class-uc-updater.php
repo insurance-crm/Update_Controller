@@ -29,18 +29,20 @@ class UC_Updater {
         }
         
         // Increase time limit for long-running updates
-        set_time_limit(300); // 5 minutes
+        $timeout = apply_filters('uc_update_timeout', 300); // 5 minutes default, filterable
+        set_time_limit($timeout);
         
         // Log the update attempt
         if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log('Update Controller: Manual update requested for plugin ID: ' . $plugin_id);
+            error_log(sprintf('Update Controller: Manual update requested for plugin ID: %d', absint($plugin_id)));
         }
         
         $result = self::update_plugin($plugin_id);
         
-        // Log the result
+        // Log the result (status only, no sensitive data)
         if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log('Update Controller: Manual update result: ' . ($result['success'] ? 'success' : 'failed') . ' - ' . $result['message']);
+            $status = $result['success'] ? 'success' : 'failed';
+            error_log(sprintf('Update Controller: Manual update completed with status: %s', sanitize_text_field($status)));
         }
         
         if ($result['success']) {
