@@ -101,6 +101,9 @@ class Update_Controller {
      * Plugin activation callback
      */
     public static function activate() {
+        // Include required files for activation
+        require_once UPDATE_CONTROLLER_PLUGIN_DIR . 'includes/class-uc-database.php';
+        
         UC_Database::create_tables();
         
         // Schedule automatic updates (daily)
