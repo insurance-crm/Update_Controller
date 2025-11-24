@@ -18,21 +18,37 @@ class UC_Updater {
         
         if (!current_user_can('manage_options')) {
             wp_send_json_error(array('message' => __('Insufficient permissions', 'update-controller')));
+            exit;
         }
         
         $plugin_id = isset($_POST['plugin_id']) ? intval($_POST['plugin_id']) : 0;
         
         if (empty($plugin_id)) {
             wp_send_json_error(array('message' => __('Invalid plugin ID', 'update-controller')));
+            exit;
+        }
+        
+        // Increase time limit for long-running updates
+        set_time_limit(300); // 5 minutes
+        
+        // Log the update attempt
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Manual update requested for plugin ID: ' . $plugin_id);
         }
         
         $result = self::update_plugin($plugin_id);
+        
+        // Log the result
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Manual update result: ' . ($result['success'] ? 'success' : 'failed') . ' - ' . $result['message']);
+        }
         
         if ($result['success']) {
             wp_send_json_success($result);
         } else {
             wp_send_json_error($result);
         }
+        exit;
     }
     
     /**

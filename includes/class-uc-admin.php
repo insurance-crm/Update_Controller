@@ -112,6 +112,7 @@ class UC_Admin {
         
         if (!current_user_can('manage_options')) {
             wp_send_json_error(array('message' => __('Insufficient permissions', 'update-controller')));
+            exit;
         }
         
         $site_url = isset($_POST['site_url']) ? $_POST['site_url'] : '';
@@ -121,6 +122,7 @@ class UC_Admin {
         
         if (empty($site_url) || empty($site_name) || empty($username) || empty($password)) {
             wp_send_json_error(array('message' => __('All fields are required', 'update-controller')));
+            exit;
         }
         
         $result = UC_Database::add_site($site_url, $site_name, $username, $password);
@@ -133,6 +135,7 @@ class UC_Admin {
         } else {
             wp_send_json_error(array('message' => __('Failed to add site', 'update-controller')));
         }
+        exit;
     }
     
     /**
@@ -143,6 +146,7 @@ class UC_Admin {
         
         if (!current_user_can('manage_options')) {
             wp_send_json_error(array('message' => __('Insufficient permissions', 'update-controller')));
+            exit;
         }
         
         $site_id = isset($_POST['site_id']) ? intval($_POST['site_id']) : 0;
@@ -153,6 +157,7 @@ class UC_Admin {
         
         if (empty($site_id) || empty($site_url) || empty($site_name) || empty($username)) {
             wp_send_json_error(array('message' => __('Required fields are missing', 'update-controller')));
+            exit;
         }
         
         $result = UC_Database::update_site($site_id, $site_url, $site_name, $username, $password);
@@ -162,6 +167,7 @@ class UC_Admin {
         } else {
             wp_send_json_error(array('message' => __('Failed to update site', 'update-controller')));
         }
+        exit;
     }
     
     /**
@@ -172,12 +178,14 @@ class UC_Admin {
         
         if (!current_user_can('manage_options')) {
             wp_send_json_error(array('message' => __('Insufficient permissions', 'update-controller')));
+            exit;
         }
         
         $site_id = isset($_POST['site_id']) ? intval($_POST['site_id']) : 0;
         
         if (empty($site_id)) {
             wp_send_json_error(array('message' => __('Invalid site ID', 'update-controller')));
+            exit;
         }
         
         $result = UC_Database::delete_site($site_id);
@@ -187,6 +195,7 @@ class UC_Admin {
         } else {
             wp_send_json_error(array('message' => __('Failed to delete site', 'update-controller')));
         }
+        exit;
     }
     
     /**
@@ -197,18 +206,21 @@ class UC_Admin {
         
         if (!current_user_can('manage_options')) {
             wp_send_json_error(array('message' => __('Insufficient permissions', 'update-controller')));
+            exit;
         }
         
         $site_id = isset($_POST['site_id']) ? intval($_POST['site_id']) : 0;
         
         if (empty($site_id)) {
             wp_send_json_error(array('message' => __('Invalid site ID', 'update-controller')));
+            exit;
         }
         
         $site = UC_Database::get_site($site_id);
         
         if (!$site) {
             wp_send_json_error(array('message' => __('Site not found', 'update-controller')));
+            exit;
         }
         
         $site_url = rtrim($site->site_url, '/');
@@ -225,6 +237,7 @@ class UC_Admin {
                     'error' => $test_response->get_error_message()
                 )
             ));
+            exit;
         }
         
         $test_code = wp_remote_retrieve_response_code($test_response);
@@ -239,6 +252,7 @@ class UC_Admin {
                     'response' => substr($test_body, 0, 200)
                 )
             ));
+            exit;
         }
         
         // Test 2: Try authentication
@@ -260,6 +274,7 @@ class UC_Admin {
                     'auth_error' => $auth_response->get_error_message()
                 )
             ));
+            exit;
         }
         
         $auth_code = wp_remote_retrieve_response_code($auth_response);
@@ -285,6 +300,7 @@ class UC_Admin {
                     'auth_code' => $auth_code
                 )
             ));
+            exit;
         }
         
         // Both tests passed!
@@ -299,6 +315,7 @@ class UC_Admin {
                 'site_url' => isset($test_data['site_url']) ? $test_data['site_url'] : $site_url
             )
         ));
+        exit;
     }
     
     /**
@@ -309,6 +326,7 @@ class UC_Admin {
         
         if (!current_user_can('manage_options')) {
             wp_send_json_error(array('message' => __('Insufficient permissions', 'update-controller')));
+            exit;
         }
         
         $site_id = isset($_POST['site_id']) ? intval($_POST['site_id']) : 0;
@@ -320,6 +338,7 @@ class UC_Admin {
         
         if (empty($site_id) || empty($plugin_slug) || empty($plugin_name) || empty($update_source)) {
             wp_send_json_error(array('message' => __('All fields are required', 'update-controller')));
+            exit;
         }
         
         $result = UC_Database::add_plugin($site_id, $plugin_slug, $plugin_name, $update_source, $source_type, $auto_update);
@@ -332,6 +351,7 @@ class UC_Admin {
         } else {
             wp_send_json_error(array('message' => __('Failed to add plugin', 'update-controller')));
         }
+        exit;
     }
     
     /**
@@ -342,6 +362,7 @@ class UC_Admin {
         
         if (!current_user_can('manage_options')) {
             wp_send_json_error(array('message' => __('Insufficient permissions', 'update-controller')));
+            exit;
         }
         
         $plugin_id = isset($_POST['plugin_id']) ? intval($_POST['plugin_id']) : 0;
@@ -353,6 +374,7 @@ class UC_Admin {
         
         if (empty($plugin_id) || empty($plugin_slug) || empty($plugin_name) || empty($update_source)) {
             wp_send_json_error(array('message' => __('Required fields are missing', 'update-controller')));
+            exit;
         }
         
         $result = UC_Database::update_plugin($plugin_id, $plugin_slug, $plugin_name, $update_source, $source_type, $auto_update);
@@ -362,6 +384,7 @@ class UC_Admin {
         } else {
             wp_send_json_error(array('message' => __('Failed to update plugin', 'update-controller')));
         }
+        exit;
     }
     
     /**
@@ -372,12 +395,14 @@ class UC_Admin {
         
         if (!current_user_can('manage_options')) {
             wp_send_json_error(array('message' => __('Insufficient permissions', 'update-controller')));
+            exit;
         }
         
         $plugin_id = isset($_POST['plugin_id']) ? intval($_POST['plugin_id']) : 0;
         
         if (empty($plugin_id)) {
             wp_send_json_error(array('message' => __('Invalid plugin ID', 'update-controller')));
+            exit;
         }
         
         $result = UC_Database::delete_plugin($plugin_id);
@@ -387,5 +412,6 @@ class UC_Admin {
         } else {
             wp_send_json_error(array('message' => __('Failed to delete plugin', 'update-controller')));
         }
+        exit;
     }
 }
