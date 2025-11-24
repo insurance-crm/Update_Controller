@@ -151,12 +151,33 @@ jQuery(document).ready(function($) {
     // Plugins Management
     var currentPluginId = null;
     
+    // Toggle source method (URL vs Upload)
+    $(document).on('change', '#uc-source-method', function() {
+        var method = $(this).val();
+        if (method === 'upload') {
+            $('#uc-source-url-fields').hide();
+            $('#uc-source-upload-fields').show();
+            $('#uc-update-source').prop('required', false);
+        } else {
+            $('#uc-source-url-fields').show();
+            $('#uc-source-upload-fields').hide();
+            $('#uc-update-source').prop('required', true);
+        }
+    });
+    
+    // Change file button
+    $(document).on('click', '#uc-change-file', function() {
+        $('#uc-plugin-file').click();
+    });
+    
     // Open add plugin modal
     $('#uc-add-plugin-btn').on('click', function() {
         currentPluginId = null;
         $('#uc-plugin-modal-title').text('Add Plugin Configuration');
         $('#uc-plugin-form')[0].reset();
         $('#uc-plugin-id').val('');
+        $('#uc-source-method').val('url').trigger('change');
+        $('#uc-current-file-info').hide();
         $('#uc-auto-update').prop('checked', true);
         $('#uc-plugin-modal').fadeIn();
     });
@@ -180,8 +201,19 @@ jQuery(document).ready(function($) {
         $('#uc-plugin-site').val(siteId);
         $('#uc-plugin-name').val(pluginName);
         $('#uc-plugin-slug').val(pluginSlug);
-        $('#uc-update-source').val(updateSource);
-        $('#uc-source-type').val(sourceType);
+        
+        // Check if it's a file upload (local:// prefix) or URL
+        if (updateSource && updateSource.startsWith('local://')) {
+            $('#uc-source-method').val('upload').trigger('change');
+            var fileName = updateSource.replace('local://', '');
+            $('#uc-current-file-name').text(fileName);
+            $('#uc-current-file-info').show();
+        } else {
+            $('#uc-source-method').val('url').trigger('change');
+            $('#uc-update-source').val(updateSource);
+            $('#uc-source-type').val(sourceType);
+        }
+        
         $('#uc-auto-update').prop('checked', autoUpdate);
         $('#uc-plugin-modal').fadeIn();
     });
@@ -223,37 +255,77 @@ jQuery(document).ready(function($) {
     $('#uc-plugin-form').on('submit', function(e) {
         e.preventDefault();
         
-        var formData = {
-            action: currentPluginId ? 'uc_update_plugin' : 'uc_add_plugin',
-            nonce: ucAdmin.nonce,
-            plugin_id: $('#uc-plugin-id').val(),
-            site_id: $('#uc-plugin-site').val(),
-            plugin_name: $('#uc-plugin-name').val(),
-            plugin_slug: $('#uc-plugin-slug').val(),
-            update_source: $('#uc-update-source').val(),
-            source_type: $('#uc-source-type').val(),
-            auto_update: $('#uc-auto-update').is(':checked') ? 1 : 0
+        var sourceMethod = $('#uc-source-method').val();
+        var formData;
+        var ajaxSettings;
+        
+        if (sourceMethod === 'upload') {
+            // File upload method
+            var fileInput = $('#uc-plugin-file')[0];
+            if (!currentPluginId && (!fileInput.files || !fileInput.files[0])) {
+                showNotice('Please select a ZIP file to upload', 'error');
+                return;
+            }
+            
+            formData = new FormData();
+            formData.append('action', currentPluginId ? 'uc_update_plugin' : 'uc_add_plugin');
+            formData.append('nonce', ucAdmin.nonce);
+            formData.append('plugin_id', $('#uc-plugin-id').val());
+            formData.append('site_id', $('#uc-plugin-site').val());
+            formData.append('plugin_name', $('#uc-plugin-name').val());
+            formData.append('plugin_slug', $('#uc-plugin-slug').val());
+            formData.append('source_type', 'upload');
+            formData.append('auto_update', $('#uc-auto-update').is(':checked') ? 1 : 0);
+            
+            if (fileInput.files && fileInput.files[0]) {
+                formData.append('plugin_file', fileInput.files[0]);
+            }
+            
+            ajaxSettings = {
+                url: ucAdmin.ajaxUrl,
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false
+            };
+        } else {
+            // URL method
+            formData = {
+                action: currentPluginId ? 'uc_update_plugin' : 'uc_add_plugin',
+                nonce: ucAdmin.nonce,
+                plugin_id: $('#uc-plugin-id').val(),
+                site_id: $('#uc-plugin-site').val(),
+                plugin_name: $('#uc-plugin-name').val(),
+                plugin_slug: $('#uc-plugin-slug').val(),
+                update_source: $('#uc-update-source').val(),
+                source_type: $('#uc-source-type').val(),
+                auto_update: $('#uc-auto-update').is(':checked') ? 1 : 0
+            };
+            
+            ajaxSettings = {
+                url: ucAdmin.ajaxUrl,
+                type: 'POST',
+                data: formData
+            };
+        }
+        
+        ajaxSettings.success = function(response) {
+            if (response.success) {
+                showNotice(response.data.message, 'success');
+                $('#uc-plugin-modal').fadeOut();
+                setTimeout(function() {
+                    location.reload();
+                }, 1000);
+            } else {
+                showNotice(response.data.message, 'error');
+            }
         };
         
-        $.ajax({
-            url: ucAdmin.ajaxUrl,
-            type: 'POST',
-            data: formData,
-            success: function(response) {
-                if (response.success) {
-                    showNotice(response.data.message, 'success');
-                    $('#uc-plugin-modal').fadeOut();
-                    setTimeout(function() {
-                        location.reload();
-                    }, 1000);
-                } else {
-                    showNotice(response.data.message, 'error');
-                }
-            },
-            error: function() {
-                showNotice('An error occurred', 'error');
-            }
-        });
+        ajaxSettings.error = function() {
+            showNotice('An error occurred', 'error');
+        };
+        
+        $.ajax(ajaxSettings);
     });
     
     // Run update

@@ -332,9 +332,22 @@ class UC_Admin {
         $site_id = isset($_POST['site_id']) ? intval($_POST['site_id']) : 0;
         $plugin_slug = isset($_POST['plugin_slug']) ? $_POST['plugin_slug'] : '';
         $plugin_name = isset($_POST['plugin_name']) ? $_POST['plugin_name'] : '';
-        $update_source = isset($_POST['update_source']) ? $_POST['update_source'] : '';
         $source_type = isset($_POST['source_type']) ? $_POST['source_type'] : 'web';
         $auto_update = isset($_POST['auto_update']) ? intval($_POST['auto_update']) : 1;
+        
+        // Handle file upload
+        if ($source_type === 'upload' && isset($_FILES['plugin_file']) && $_FILES['plugin_file']['error'] === UPLOAD_ERR_OK) {
+            $upload_result = self::handle_plugin_file_upload($_FILES['plugin_file']);
+            
+            if (is_wp_error($upload_result)) {
+                wp_send_json_error(array('message' => $upload_result->get_error_message()));
+                exit;
+            }
+            
+            $update_source = $upload_result['url'];
+        } else {
+            $update_source = isset($_POST['update_source']) ? $_POST['update_source'] : '';
+        }
         
         if (empty($site_id) || empty($plugin_slug) || empty($plugin_name) || empty($update_source)) {
             wp_send_json_error(array('message' => __('All fields are required', 'update-controller')));
@@ -368,9 +381,30 @@ class UC_Admin {
         $plugin_id = isset($_POST['plugin_id']) ? intval($_POST['plugin_id']) : 0;
         $plugin_slug = isset($_POST['plugin_slug']) ? $_POST['plugin_slug'] : '';
         $plugin_name = isset($_POST['plugin_name']) ? $_POST['plugin_name'] : '';
-        $update_source = isset($_POST['update_source']) ? $_POST['update_source'] : '';
         $source_type = isset($_POST['source_type']) ? $_POST['source_type'] : 'web';
         $auto_update = isset($_POST['auto_update']) ? intval($_POST['auto_update']) : 1;
+        
+        // Handle file upload
+        if ($source_type === 'upload' && isset($_FILES['plugin_file']) && $_FILES['plugin_file']['error'] === UPLOAD_ERR_OK) {
+            $upload_result = self::handle_plugin_file_upload($_FILES['plugin_file']);
+            
+            if (is_wp_error($upload_result)) {
+                wp_send_json_error(array('message' => $upload_result->get_error_message()));
+                exit;
+            }
+            
+            $update_source = $upload_result['url'];
+        } else {
+            $update_source = isset($_POST['update_source']) ? $_POST['update_source'] : '';
+            
+            // If updating without new file, keep existing source
+            if ($source_type === 'upload' && empty($update_source)) {
+                $plugin = UC_Database::get_plugin($plugin_id);
+                if ($plugin) {
+                    $update_source = $plugin->update_source;
+                }
+            }
+        }
         
         if (empty($plugin_id) || empty($plugin_slug) || empty($plugin_name) || empty($update_source)) {
             wp_send_json_error(array('message' => __('Required fields are missing', 'update-controller')));
@@ -413,5 +447,52 @@ class UC_Admin {
             wp_send_json_error(array('message' => __('Failed to delete plugin', 'update-controller')));
         }
         exit;
+    }
+    
+    /**
+     * Handle plugin file upload
+     */
+    private static function handle_plugin_file_upload($file) {
+        // Check file type
+        $file_type = wp_check_filetype($file['name']);
+        if ($file_type['ext'] !== 'zip') {
+            return new WP_Error('invalid_file_type', __('Only ZIP files are allowed', 'update-controller'));
+        }
+        
+        // Check file size (50MB max)
+        $max_size = 50 * 1024 * 1024; // 50MB in bytes
+        if ($file['size'] > $max_size) {
+            return new WP_Error('file_too_large', __('File size exceeds 50MB limit', 'update-controller'));
+        }
+        
+        // Create upload directory if it doesn't exist
+        $upload_dir = wp_upload_dir();
+        $uc_dir = $upload_dir['basedir'] . '/update-controller';
+        
+        if (!file_exists($uc_dir)) {
+            wp_mkdir_p($uc_dir);
+        }
+        
+        // Generate unique filename
+        $filename = sanitize_file_name($file['name']);
+        $unique_filename = wp_unique_filename($uc_dir, $filename);
+        $upload_path = $uc_dir . '/' . $unique_filename;
+        
+        // Move uploaded file
+        if (!move_uploaded_file($file['tmp_name'], $upload_path)) {
+            return new WP_Error('upload_failed', __('Failed to save uploaded file', 'update-controller'));
+        }
+        
+        // Make file publicly accessible with proper permissions
+        chmod($upload_path, 0644);
+        
+        // Generate URL
+        $upload_url = $upload_dir['baseurl'] . '/update-controller/' . $unique_filename;
+        
+        return array(
+            'path' => $upload_path,
+            'url' => $upload_url,
+            'filename' => $unique_filename
+        );
     }
 }

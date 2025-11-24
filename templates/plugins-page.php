@@ -92,18 +92,41 @@
             </p>
             
             <p>
-                <label for="uc-update-source"><?php echo esc_html__('Update Source URL', 'update-controller'); ?></label>
-                <input type="url" id="uc-update-source" name="update_source" class="regular-text" placeholder="https://example.com/plugin.zip" required>
-                <span class="description"><?php echo esc_html__('Direct download URL or GitHub repository URL', 'update-controller'); ?></span>
-            </p>
-            
-            <p>
-                <label for="uc-source-type"><?php echo esc_html__('Source Type', 'update-controller'); ?></label>
-                <select id="uc-source-type" name="source_type" class="regular-text">
-                    <option value="web"><?php echo esc_html__('Web URL', 'update-controller'); ?></option>
-                    <option value="github"><?php echo esc_html__('GitHub Repository', 'update-controller'); ?></option>
+                <label for="uc-update-source"><?php echo esc_html__('Update Source', 'update-controller'); ?></label>
+                <select id="uc-source-method" class="regular-text">
+                    <option value="url"><?php echo esc_html__('URL (Link)', 'update-controller'); ?></option>
+                    <option value="upload"><?php echo esc_html__('Upload File', 'update-controller'); ?></option>
                 </select>
             </p>
+            
+            <div id="uc-source-url-fields">
+                <p>
+                    <label for="uc-update-source"><?php echo esc_html__('Update Source URL', 'update-controller'); ?></label>
+                    <input type="url" id="uc-update-source" name="update_source" class="regular-text" placeholder="https://example.com/plugin.zip">
+                    <span class="description"><?php echo esc_html__('Direct download URL, GitHub repository URL, or Google Drive link', 'update-controller'); ?></span>
+                </p>
+                
+                <p>
+                    <label for="uc-source-type"><?php echo esc_html__('Source Type', 'update-controller'); ?></label>
+                    <select id="uc-source-type" name="source_type" class="regular-text">
+                        <option value="web"><?php echo esc_html__('Web URL', 'update-controller'); ?></option>
+                        <option value="github"><?php echo esc_html__('GitHub Repository', 'update-controller'); ?></option>
+                    </select>
+                </p>
+            </div>
+            
+            <div id="uc-source-upload-fields" style="display:none;">
+                <p>
+                    <label for="uc-plugin-file"><?php echo esc_html__('Plugin ZIP File', 'update-controller'); ?></label>
+                    <input type="file" id="uc-plugin-file" name="plugin_file" accept=".zip">
+                    <span class="description"><?php echo esc_html__('Upload plugin ZIP file (max 50MB)', 'update-controller'); ?></span>
+                </p>
+                <p id="uc-current-file-info" style="display:none;">
+                    <strong><?php echo esc_html__('Current file:', 'update-controller'); ?></strong>
+                    <span id="uc-current-file-name"></span>
+                    <button type="button" class="button button-small" id="uc-change-file"><?php echo esc_html__('Change File', 'update-controller'); ?></button>
+                </p>
+            </div>
             
             <p>
                 <label>
