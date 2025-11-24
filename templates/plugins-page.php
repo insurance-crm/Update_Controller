@@ -26,7 +26,13 @@
                     <?php
                     $site = UC_Database::get_site($plugin->site_id);
                     ?>
-                    <tr data-plugin-id="<?php echo esc_attr($plugin->id); ?>">
+                    <tr data-plugin-id="<?php echo esc_attr($plugin->id); ?>" 
+                        data-site-id="<?php echo esc_attr($plugin->site_id); ?>"
+                        data-plugin-name="<?php echo esc_attr($plugin->plugin_name); ?>"
+                        data-plugin-slug="<?php echo esc_attr($plugin->plugin_slug); ?>"
+                        data-update-source="<?php echo esc_attr($plugin->update_source); ?>"
+                        data-source-type="<?php echo esc_attr($plugin->source_type); ?>"
+                        data-auto-update="<?php echo esc_attr($plugin->auto_update); ?>">
                         <td><?php echo $site ? esc_html($site->site_name) : '-'; ?></td>
                         <td><?php echo esc_html($plugin->plugin_name); ?></td>
                         <td><code><?php echo esc_html($plugin->plugin_slug); ?></code></td>

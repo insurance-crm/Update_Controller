@@ -19,11 +19,11 @@ jQuery(document).ready(function($) {
         var siteId = $(this).data('id');
         currentSiteId = siteId;
         
-        // Get site data from table row
+        // Get site data from table row data attributes
         var $row = $(this).closest('tr');
-        var siteName = $row.find('td:eq(0)').text();
-        var siteUrl = $row.find('td:eq(1) a').attr('href');
-        var username = $row.find('td:eq(2)').text();
+        var siteName = $row.data('site-name');
+        var siteUrl = $row.data('site-url');
+        var username = $row.data('username');
         
         $('#uc-site-modal-title').text('Edit Site');
         $('#uc-site-id').val(siteId);
@@ -166,16 +166,18 @@ jQuery(document).ready(function($) {
         var pluginId = $(this).data('id');
         currentPluginId = pluginId;
         
-        // Get plugin data from table row
+        // Get plugin data from table row data attributes
         var $row = $(this).closest('tr');
-        var pluginName = $row.find('td:eq(1)').text();
-        var pluginSlug = $row.find('td:eq(2) code').text();
-        var updateSource = $row.find('td:eq(3) a').attr('href');
-        var sourceType = $row.find('td:eq(4) .uc-badge').text().trim();
-        var autoUpdate = $row.find('td:eq(5)').text().trim() === 'Yes';
+        var siteId = $row.data('site-id');
+        var pluginName = $row.data('plugin-name');
+        var pluginSlug = $row.data('plugin-slug');
+        var updateSource = $row.data('update-source');
+        var sourceType = $row.data('source-type');
+        var autoUpdate = $row.data('auto-update') == 1;
         
         $('#uc-plugin-modal-title').text('Edit Plugin Configuration');
         $('#uc-plugin-id').val(pluginId);
+        $('#uc-plugin-site').val(siteId);
         $('#uc-plugin-name').val(pluginName);
         $('#uc-plugin-slug').val(pluginSlug);
         $('#uc-update-source').val(updateSource);

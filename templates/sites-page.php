@@ -21,7 +21,10 @@
         <tbody>
             <?php if (!empty($sites)) : ?>
                 <?php foreach ($sites as $site) : ?>
-                    <tr data-site-id="<?php echo esc_attr($site->id); ?>">
+                    <tr data-site-id="<?php echo esc_attr($site->id); ?>"
+                        data-site-name="<?php echo esc_attr($site->site_name); ?>"
+                        data-site-url="<?php echo esc_attr($site->site_url); ?>"
+                        data-username="<?php echo esc_attr($site->username); ?>">
                         <td><?php echo esc_html($site->site_name); ?></td>
                         <td><a href="<?php echo esc_url($site->site_url); ?>" target="_blank"><?php echo esc_html($site->site_url); ?></a></td>
                         <td><?php echo esc_html($site->username); ?></td>
