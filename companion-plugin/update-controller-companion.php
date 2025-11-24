@@ -149,7 +149,18 @@ class UC_Companion {
         require_once(ABSPATH . 'wp-admin/includes/plugin-install.php');
         
         // Initialize filesystem
-        WP_Filesystem();
+        $creds = request_filesystem_credentials('', '', false, false, array());
+        if (!WP_Filesystem($creds)) {
+            // Fallback to direct filesystem if credentials fail
+            if (defined('FS_METHOD')) {
+                $original_fs_method = FS_METHOD;
+            }
+            define('FS_METHOD', 'direct');
+            WP_Filesystem();
+            if (isset($original_fs_method)) {
+                define('FS_METHOD', $original_fs_method);
+            }
+        }
         global $wp_filesystem;
         
         // Unzip to temporary directory to check plugin info
@@ -170,17 +181,25 @@ class UC_Companion {
         $plugin_main_file = '';
         
         $folders = glob($temp_dir . '/*', GLOB_ONLYDIR);
-        if (!empty($folders)) {
-            $plugin_folder = basename($folders[0]);
-            
-            // Find the main plugin file
-            $php_files = glob($folders[0] . '/*.php');
-            foreach ($php_files as $php_file) {
-                $plugin_data = get_plugin_data($php_file, false, false);
-                if (!empty($plugin_data['Name'])) {
-                    $plugin_main_file = $plugin_folder . '/' . basename($php_file);
-                    break;
-                }
+        if (empty($folders)) {
+            // Clean up
+            self::recursive_rmdir($temp_dir);
+            if (get_transient('uc_plugin_file_' . $file_id)) {
+                delete_transient('uc_plugin_file_' . $file_id);
+                @unlink($file_path);
+            }
+            return new WP_Error('invalid_plugin', __('No plugin folder found in ZIP file', 'update-controller-companion'), array('status' => 500));
+        }
+        
+        $plugin_folder = basename($folders[0]);
+        
+        // Find the main plugin file
+        $php_files = glob($folders[0] . '/*.php');
+        foreach ($php_files as $php_file) {
+            $plugin_data = get_plugin_data($php_file, false, false);
+            if (!empty($plugin_data['Name'])) {
+                $plugin_main_file = $plugin_folder . '/' . basename($php_file);
+                break;
             }
         }
         
@@ -193,15 +212,31 @@ class UC_Companion {
             
             // Remove old plugin directory
             if (file_exists($plugin_dir)) {
-                $wp_filesystem->delete($plugin_dir, true);
+                if ($wp_filesystem) {
+                    $wp_filesystem->delete($plugin_dir, true);
+                } else {
+                    self::recursive_rmdir($plugin_dir);
+                }
             }
         }
         
         // Move the plugin to the plugins directory
-        $move_result = $wp_filesystem->move($folders[0], $plugin_dir, true);
+        $move_result = false;
+        if ($wp_filesystem && method_exists($wp_filesystem, 'move')) {
+            $move_result = $wp_filesystem->move($folders[0], $plugin_dir, true);
+        }
+        
+        // Fallback to PHP rename if WP_Filesystem failed
+        if (!$move_result) {
+            $move_result = @rename($folders[0], $plugin_dir);
+        }
         
         // Clean up temp directory
-        $wp_filesystem->delete($temp_dir, true);
+        if ($wp_filesystem) {
+            $wp_filesystem->delete($temp_dir, true);
+        } else {
+            self::recursive_rmdir($temp_dir);
+        }
         
         // Clean up uploaded file
         if (get_transient('uc_plugin_file_' . $file_id)) {
@@ -212,7 +247,19 @@ class UC_Companion {
         }
         
         if (!$move_result) {
-            return new WP_Error('install_failed', __('Failed to move plugin to plugins directory', 'update-controller-companion'), array('status' => 500));
+            $error_msg = __('Failed to move plugin to plugins directory. ', 'update-controller-companion');
+            
+            // Check directory permissions
+            if (!is_writable(WP_PLUGIN_DIR)) {
+                $error_msg .= sprintf(__('Plugin directory (%s) is not writable. Check file permissions.', 'update-controller-companion'), WP_PLUGIN_DIR);
+            }
+            
+            return new WP_Error('install_failed', $error_msg, array('status' => 500));
+        }
+        
+        // Verify plugin was installed
+        if (!file_exists($plugin_dir)) {
+            return new WP_Error('install_failed', __('Plugin directory not found after move operation', 'update-controller-companion'), array('status' => 500));
         }
         
         return array(
@@ -222,6 +269,27 @@ class UC_Companion {
             'is_update' => $is_update,
             'plugin_folder' => $plugin_folder
         );
+    }
+    
+    /**
+     * Recursively delete directory
+     */
+    private static function recursive_rmdir($dir) {
+        if (!file_exists($dir)) {
+            return true;
+        }
+        
+        if (!is_dir($dir)) {
+            return @unlink($dir);
+        }
+        
+        $files = array_diff(scandir($dir), array('.', '..'));
+        foreach ($files as $file) {
+            $path = $dir . '/' . $file;
+            is_dir($path) ? self::recursive_rmdir($path) : @unlink($path);
+        }
+        
+        return @rmdir($dir);
     }
     
     /**
