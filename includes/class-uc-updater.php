@@ -144,10 +144,53 @@ class UC_Updater {
             $source_url = self::convert_github_url($source_url);
         }
         
+        // Handle Google Drive URLs
+        if (strpos($source_url, 'drive.google.com') !== false) {
+            $source_url = self::convert_google_drive_url($source_url);
+            if (is_wp_error($source_url)) {
+                return $source_url;
+            }
+        }
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Downloading from URL: ' . $source_url);
+        }
+        
         $temp_file = download_url($source_url);
         
         if (is_wp_error($temp_file)) {
             return $temp_file;
+        }
+        
+        // Validate that we downloaded a ZIP file
+        $file_type = wp_check_filetype($temp_file);
+        $file_size = filesize($temp_file);
+        
+        // Check if file is actually a ZIP (not HTML or other format)
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime_type = finfo_file($finfo, $temp_file);
+        finfo_close($finfo);
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Downloaded file mime type: ' . $mime_type . ', size: ' . $file_size . ' bytes');
+        }
+        
+        // Validate it's a ZIP file
+        if ($mime_type !== 'application/zip' && $file_type['ext'] !== 'zip') {
+            @unlink($temp_file);
+            
+            // Check if it's an HTML file (common with Google Drive sharing links)
+            if (strpos($mime_type, 'text/html') !== false || $file_size < 1000) {
+                return new WP_Error(
+                    'invalid_source',
+                    __('Download failed: Source URL returned an HTML page instead of a ZIP file. If using Google Drive, make sure to use a direct download link. See documentation for proper URL formats.', 'update-controller')
+                );
+            }
+            
+            return new WP_Error(
+                'invalid_file_type',
+                sprintf(__('Download failed: Expected ZIP file but got %s. Please check the source URL.', 'update-controller'), $mime_type)
+            );
         }
         
         return $temp_file;
@@ -173,6 +216,32 @@ class UC_Updater {
         }
         
         return $url;
+    }
+    
+    /**
+     * Convert Google Drive sharing URL to direct download URL
+     */
+    private static function convert_google_drive_url($url) {
+        // Google Drive sharing links look like:
+        // https://drive.google.com/file/d/FILE_ID/view?usp=sharing
+        // Direct download should be:
+        // https://drive.google.com/uc?export=download&id=FILE_ID
+        
+        if (preg_match('#drive\.google\.com/file/d/([^/]+)#', $url, $matches)) {
+            $file_id = $matches[1];
+            return 'https://drive.google.com/uc?export=download&id=' . $file_id;
+        }
+        
+        // If already a direct download link, return as is
+        if (strpos($url, 'drive.google.com/uc?') !== false) {
+            return $url;
+        }
+        
+        // If we can't parse it, return an error
+        return new WP_Error(
+            'invalid_google_drive_url',
+            __('Invalid Google Drive URL format. Please use: https://drive.google.com/file/d/FILE_ID/view or get a direct download link.', 'update-controller')
+        );
     }
     
     /**
