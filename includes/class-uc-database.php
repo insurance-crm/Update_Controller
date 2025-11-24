@@ -21,7 +21,7 @@ class UC_Database {
         
         // Sites table
         $sites_table = $controller->get_sites_table();
-        $sites_sql = "CREATE TABLE IF NOT EXISTS $sites_table (
+        $sites_sql = "CREATE TABLE $sites_table (
             id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
             site_url varchar(255) NOT NULL,
             site_name varchar(255) NOT NULL,
@@ -30,13 +30,13 @@ class UC_Database {
             status varchar(20) DEFAULT 'active',
             last_update datetime DEFAULT NULL,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
+            PRIMARY KEY  (id),
             UNIQUE KEY site_url (site_url)
         ) $charset_collate;";
         
         // Plugins table
         $plugins_table = $controller->get_plugins_table();
-        $plugins_sql = "CREATE TABLE IF NOT EXISTS $plugins_table (
+        $plugins_sql = "CREATE TABLE $plugins_table (
             id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
             site_id bigint(20) UNSIGNED NOT NULL,
             plugin_slug varchar(255) NOT NULL,
@@ -46,7 +46,7 @@ class UC_Database {
             auto_update tinyint(1) DEFAULT 1,
             last_update datetime DEFAULT NULL,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
+            PRIMARY KEY  (id),
             KEY site_id (site_id)
         ) $charset_collate;";
         
