@@ -39,10 +39,15 @@ class UC_Updater {
         
         $result = self::update_plugin($plugin_id);
         
-        // Log the result (status only, no sensitive data)
+        // Log the result with error message for debugging
         if (defined('WP_DEBUG') && WP_DEBUG) {
-            $status = $result['success'] ? 'success' : 'failed';
-            error_log(sprintf('Update Controller: Manual update completed with status: %s', sanitize_text_field($status)));
+            if ($result['success']) {
+                error_log('Update Controller: Manual update completed with status: success');
+            } else {
+                // Log error message without sensitive data
+                $error_msg = isset($result['message']) ? $result['message'] : 'Unknown error';
+                error_log('Update Controller: Manual update failed - ' . sanitize_text_field($error_msg));
+            }
         }
         
         if ($result['success']) {
@@ -313,6 +318,9 @@ class UC_Updater {
             
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log('Update Controller: Companion upload response code: ' . $code);
+                if ($code !== 200) {
+                    error_log('Update Controller: Companion upload failed - ' . substr($body_text, 0, 200));
+                }
             }
             
             if ($code === 200 && isset($body['file_id'])) {
@@ -320,6 +328,10 @@ class UC_Updater {
                     error_log('Update Controller: Upload via companion successful, file ID: ' . $body['file_id']);
                 }
                 return array('id' => $body['file_id'], 'method' => 'companion');
+            }
+        } else {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Update Controller: Companion upload request error - ' . $response->get_error_message());
             }
         }
         
@@ -356,7 +368,10 @@ class UC_Updater {
         if ($code !== 201 && $code !== 200) {
             $error_msg = isset($body['message']) ? $body['message'] : 'HTTP ' . $code;
             if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('Update Controller: Upload failed with code ' . $code . ': ' . $error_msg);
+                error_log('Update Controller: Media library upload failed with code ' . $code . ': ' . $error_msg);
+                if ($code === 403) {
+                    error_log('Update Controller: 403 Forbidden - Check user has upload_files capability');
+                }
             }
             return new WP_Error('upload_failed', __('Failed to upload plugin file: ', 'update-controller') . $error_msg);
         }
