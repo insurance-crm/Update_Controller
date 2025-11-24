@@ -17,10 +17,12 @@ class UC_Database {
         global $wpdb;
         
         $charset_collate = $wpdb->get_charset_collate();
-        $controller = Update_Controller::get_instance();
+        
+        // Define table names directly
+        $sites_table = $wpdb->prefix . 'uc_sites';
+        $plugins_table = $wpdb->prefix . 'uc_plugins';
         
         // Sites table
-        $sites_table = $controller->get_sites_table();
         $sites_sql = "CREATE TABLE $sites_table (
             id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
             site_url varchar(255) NOT NULL,
@@ -35,7 +37,6 @@ class UC_Database {
         ) $charset_collate;";
         
         // Plugins table
-        $plugins_table = $controller->get_plugins_table();
         $plugins_sql = "CREATE TABLE $plugins_table (
             id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
             site_id bigint(20) UNSIGNED NOT NULL,
@@ -51,8 +52,23 @@ class UC_Database {
         ) $charset_collate;";
         
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        dbDelta($sites_sql);
-        dbDelta($plugins_sql);
+        
+        $result_sites = dbDelta($sites_sql);
+        $result_plugins = dbDelta($plugins_sql);
+        
+        // Log results for debugging
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Sites table creation result - ' . print_r($result_sites, true));
+            error_log('Update Controller: Plugins table creation result - ' . print_r($result_plugins, true));
+        }
+        
+        // Verify tables were created
+        $sites_exists = $wpdb->get_var("SHOW TABLES LIKE '$sites_table'") == $sites_table;
+        $plugins_exists = $wpdb->get_var("SHOW TABLES LIKE '$plugins_table'") == $plugins_table;
+        
+        if (!$sites_exists || !$plugins_exists) {
+            error_log('Update Controller: Table creation failed. Sites exists: ' . ($sites_exists ? 'yes' : 'no') . ', Plugins exists: ' . ($plugins_exists ? 'yes' : 'no'));
+        }
     }
     
     /**

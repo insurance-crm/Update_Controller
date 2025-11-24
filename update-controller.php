@@ -78,10 +78,6 @@ class Update_Controller {
      * Initialize hooks
      */
     private function init_hooks() {
-        // Activation and deactivation hooks
-        register_activation_hook(UPDATE_CONTROLLER_PLUGIN_FILE, array($this, 'activate'));
-        register_deactivation_hook(UPDATE_CONTROLLER_PLUGIN_FILE, array($this, 'deactivate'));
-        
         // Admin menu
         add_action('admin_menu', array('UC_Admin', 'add_menu'));
         
@@ -102,9 +98,9 @@ class Update_Controller {
     }
     
     /**
-     * Plugin activation
+     * Plugin activation callback
      */
-    public function activate() {
+    public static function activate() {
         UC_Database::create_tables();
         
         // Schedule automatic updates (daily)
@@ -114,9 +110,9 @@ class Update_Controller {
     }
     
     /**
-     * Plugin deactivation
+     * Plugin deactivation callback
      */
-    public function deactivate() {
+    public static function deactivate() {
         // Clear scheduled events
         $timestamp = wp_next_scheduled('uc_scheduled_update');
         if ($timestamp) {
@@ -148,3 +144,9 @@ function update_controller_init() {
 
 // Initialize plugin
 add_action('plugins_loaded', 'update_controller_init');
+
+// Register activation hook
+register_activation_hook(UPDATE_CONTROLLER_PLUGIN_FILE, array('Update_Controller', 'activate'));
+
+// Register deactivation hook
+register_deactivation_hook(UPDATE_CONTROLLER_PLUGIN_FILE, array('Update_Controller', 'deactivate'));
