@@ -275,6 +275,10 @@ class UC_Updater {
         $file_content = file_get_contents($file_path);
         $file_name = basename($file_path);
         
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Uploading plugin file to ' . $site_url);
+        }
+        
         // Upload via REST API to media library
         $response = wp_remote_post($site_url . '/wp-json/wp/v2/media', array(
             'headers' => array_merge($auth_headers, array(
@@ -286,16 +290,37 @@ class UC_Updater {
         ));
         
         if (is_wp_error($response)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Update Controller: Upload failed - ' . $response->get_error_message());
+            }
             return $response;
         }
         
-        $body = json_decode(wp_remote_retrieve_body($response), true);
+        $code = wp_remote_retrieve_response_code($response);
+        $body_text = wp_remote_retrieve_body($response);
+        $body = json_decode($body_text, true);
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Upload response code: ' . $code);
+            error_log('Update Controller: Upload response: ' . substr($body_text, 0, 500));
+        }
+        
+        if ($code !== 201 && $code !== 200) {
+            $error_msg = isset($body['message']) ? $body['message'] : 'HTTP ' . $code;
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Update Controller: Upload failed with code ' . $code . ': ' . $error_msg);
+            }
+            return new WP_Error('upload_failed', __('Failed to upload plugin file: ', 'update-controller') . $error_msg);
+        }
         
         if (isset($body['id'])) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Update Controller: Upload successful, media ID: ' . $body['id']);
+            }
             return $body;
         }
         
-        return new WP_Error('upload_failed', __('Failed to upload plugin file', 'update-controller'));
+        return new WP_Error('upload_failed', __('Failed to upload plugin file - no media ID returned', 'update-controller'));
     }
     
     /**
@@ -311,6 +336,10 @@ class UC_Updater {
             return new WP_Error('invalid_upload', __('Invalid upload data', 'update-controller'));
         }
         
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Installing plugin from media ID: ' . $upload_data['id']);
+        }
+        
         // Call the companion plugin's install endpoint
         $response = wp_remote_post($site_url . '/wp-json/uc-companion/v1/install-plugin', array(
             'headers' => $auth_headers,
@@ -321,15 +350,31 @@ class UC_Updater {
         ));
         
         if (is_wp_error($response)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Update Controller: Install request failed - ' . $response->get_error_message());
+            }
             return $response;
         }
         
         $code = wp_remote_retrieve_response_code($response);
-        $body = json_decode(wp_remote_retrieve_body($response), true);
+        $body_text = wp_remote_retrieve_body($response);
+        $body = json_decode($body_text, true);
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Install response code: ' . $code);
+            error_log('Update Controller: Install response: ' . substr($body_text, 0, 500));
+        }
         
         if ($code !== 200) {
-            $message = isset($body['message']) ? $body['message'] : __('Plugin installation failed', 'update-controller');
+            $message = isset($body['message']) ? $body['message'] : __('Plugin installation failed with HTTP ', 'update-controller') . $code;
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Update Controller: Installation failed: ' . $message);
+            }
             return new WP_Error('install_failed', $message);
+        }
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Plugin installed successfully');
         }
         
         return $body;
