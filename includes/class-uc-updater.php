@@ -52,6 +52,11 @@ class UC_Updater {
      * Update a specific plugin
      */
     public static function update_plugin($plugin_id) {
+        // Include WordPress file functions
+        if (!function_exists('download_url')) {
+            require_once(ABSPATH . 'wp-admin/includes/file.php');
+        }
+        
         $plugin = UC_Database::get_plugin($plugin_id);
         
         if (!$plugin) {
