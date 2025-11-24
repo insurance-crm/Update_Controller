@@ -206,6 +206,7 @@ class UC_Updater {
         }
         
         $code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
         
         if ($code === 200) {
             // Return authentication credentials for further requests
@@ -214,7 +215,24 @@ class UC_Updater {
             );
         }
         
-        return new WP_Error('auth_failed', __('Authentication failed. Please check credentials.', 'update-controller'));
+        // Handle specific error codes
+        $error_message = '';
+        switch ($code) {
+            case 403:
+                $error_message = __('Access forbidden. Please check that Application Passwords are enabled and the companion plugin is installed on the target site.', 'update-controller');
+                break;
+            case 401:
+                $error_message = __('Invalid credentials. Please check the username and password/application password.', 'update-controller');
+                break;
+            case 404:
+                $error_message = __('REST API endpoint not found. Please ensure WordPress REST API is enabled and the site URL is correct.', 'update-controller');
+                break;
+            default:
+                $error_message = sprintf(__('Authentication failed with HTTP code %d. Please check credentials and site configuration.', 'update-controller'), $code);
+                break;
+        }
+        
+        return new WP_Error('auth_failed', $error_message);
     }
     
     /**
