@@ -198,6 +198,11 @@ class UC_Updater {
     private static function authenticate_site($site_url, $username, $password) {
         $site_url = rtrim($site_url, '/');
         
+        // Log authentication attempt for debugging
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Attempting authentication to ' . $site_url);
+        }
+        
         // Try to authenticate using WordPress REST API with Application Passwords
         $response = wp_remote_post($site_url . '/wp-json/wp/v2/users/me', array(
             'headers' => array(
@@ -207,14 +212,24 @@ class UC_Updater {
         ));
         
         if (is_wp_error($response)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Update Controller: Authentication request error - ' . $response->get_error_message());
+            }
             return $response;
         }
         
         $code = wp_remote_retrieve_response_code($response);
         $body = wp_remote_retrieve_body($response);
         
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Authentication response code: ' . $code);
+        }
+        
         if ($code === 200) {
             // Return authentication credentials for further requests
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Update Controller: Authentication successful');
+            }
             return array(
                 'Authorization' => 'Basic ' . base64_encode($username . ':' . $password)
             );
@@ -224,17 +239,24 @@ class UC_Updater {
         $error_message = '';
         switch ($code) {
             case 403:
-                $error_message = __('Access forbidden. Please check that Application Passwords are enabled and the companion plugin is installed on the target site.', 'update-controller');
+                $error_message = __('Access forbidden (403). Please verify: 1) Companion plugin is installed and activated on target site, 2) Application Passwords are enabled in WordPress 5.6+, 3) Username is correct.', 'update-controller');
                 break;
             case 401:
-                $error_message = __('Invalid credentials. Please check the username and password/application password.', 'update-controller');
+                $error_message = __('Invalid credentials (401). Please check the username and Application Password. Make sure to copy the password with all spaces.', 'update-controller');
                 break;
             case 404:
-                $error_message = __('REST API endpoint not found. Please ensure WordPress REST API is enabled and the site URL is correct.', 'update-controller');
+                $error_message = __('REST API not found (404). Please ensure: 1) WordPress REST API is enabled, 2) Site URL is correct and includes /wp-json path.', 'update-controller');
+                break;
+            case 0:
+                $error_message = __('Connection failed. Please check: 1) Site URL is accessible, 2) SSL certificate is valid, 3) Server can connect to target site.', 'update-controller');
                 break;
             default:
-                $error_message = sprintf(__('Authentication failed with HTTP code %d. Please check credentials and site configuration.', 'update-controller'), $code);
+                $error_message = sprintf(__('Authentication failed with HTTP code %d. Response: %s', 'update-controller'), $code, substr($body, 0, 200));
                 break;
+        }
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Authentication failed - ' . $error_message);
         }
         
         return new WP_Error('auth_failed', $error_message);

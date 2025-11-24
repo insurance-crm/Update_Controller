@@ -231,11 +231,24 @@ jQuery(document).ready(function($) {
                         location.reload();
                     }, 2000);
                 } else {
-                    $('#uc-update-progress').html('<p class="uc-notice uc-notice-error">' + response.data.message + '</p>');
+                    var errorMessage = response.data && response.data.message ? response.data.message : 'Unknown error occurred';
+                    $('#uc-update-progress').html('<p class="uc-notice uc-notice-error">' + errorMessage + '</p>');
                 }
             },
-            error: function() {
-                $('#uc-update-progress').html('<p class="uc-notice uc-notice-error">An error occurred</p>');
+            error: function(xhr, status, error) {
+                var errorMessage = 'Connection error: ' + (error || status || 'Unknown error');
+                if (xhr.responseText) {
+                    try {
+                        var response = JSON.parse(xhr.responseText);
+                        if (response.data && response.data.message) {
+                            errorMessage = response.data.message;
+                        }
+                    } catch(e) {
+                        // If not JSON, show status text
+                        errorMessage = xhr.statusText || errorMessage;
+                    }
+                }
+                $('#uc-update-progress').html('<p class="uc-notice uc-notice-error">' + errorMessage + '</p>');
             }
         });
     });
