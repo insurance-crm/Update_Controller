@@ -88,6 +88,7 @@ class Update_Controller {
         add_action('wp_ajax_uc_add_site', array('UC_Admin', 'ajax_add_site'));
         add_action('wp_ajax_uc_update_site', array('UC_Admin', 'ajax_update_site'));
         add_action('wp_ajax_uc_delete_site', array('UC_Admin', 'ajax_delete_site'));
+        add_action('wp_ajax_uc_test_connection', array('UC_Admin', 'ajax_test_connection'));
         add_action('wp_ajax_uc_add_plugin', array('UC_Admin', 'ajax_add_plugin'));
         add_action('wp_ajax_uc_update_plugin', array('UC_Admin', 'ajax_update_plugin'));
         add_action('wp_ajax_uc_delete_plugin', array('UC_Admin', 'ajax_delete_plugin'));

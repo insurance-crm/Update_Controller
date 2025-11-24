@@ -67,6 +67,43 @@ jQuery(document).ready(function($) {
         });
     });
     
+    // Test connection
+    $(document).on('click', '.uc-test-connection', function() {
+        var siteId = $(this).data('id');
+        var $button = $(this);
+        var originalText = $button.text();
+        
+        $button.prop('disabled', true).text('Testing...');
+        
+        $.ajax({
+            url: ucAdmin.ajaxUrl,
+            type: 'POST',
+            data: {
+                action: 'uc_test_connection',
+                nonce: ucAdmin.nonce,
+                site_id: siteId
+            },
+            success: function(response) {
+                if (response.success) {
+                    alert('Connection Test Successful!\n\n' + response.data.message + 
+                          '\n\nDetails:\n' +
+                          'Companion Plugin: ' + response.data.details.companion_status + '\n' +
+                          'Authentication: ' + response.data.details.auth_status + '\n' +
+                          'WordPress Version: ' + response.data.details.wp_version);
+                } else {
+                    alert('Connection Test Failed!\n\n' + response.data.message +
+                          (response.data.details ? '\n\nDetails:\n' + JSON.stringify(response.data.details, null, 2) : ''));
+                }
+            },
+            error: function(xhr, status, error) {
+                alert('Connection Test Error!\n\nFailed to connect to server: ' + error);
+            },
+            complete: function() {
+                $button.prop('disabled', false).text(originalText);
+            }
+        });
+    });
+    
     // Submit site form
     $('#uc-site-form').on('submit', function(e) {
         e.preventDefault();

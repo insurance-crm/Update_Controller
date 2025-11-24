@@ -28,6 +28,9 @@
                         <td><span class="uc-status uc-status-<?php echo esc_attr($site->status); ?>"><?php echo esc_html($site->status); ?></span></td>
                         <td><?php echo $site->last_update ? esc_html(date_i18n(get_option('date_format') . ' ' . get_option('time_format'), strtotime($site->last_update))) : '-'; ?></td>
                         <td>
+                            <button type="button" class="button button-small uc-test-connection" data-id="<?php echo esc_attr($site->id); ?>" title="<?php echo esc_attr__('Test Connection', 'update-controller'); ?>">
+                                <?php echo esc_html__('Test', 'update-controller'); ?>
+                            </button>
                             <button type="button" class="button button-small uc-edit-site" data-id="<?php echo esc_attr($site->id); ?>">
                                 <?php echo esc_html__('Edit', 'update-controller'); ?>
                             </button>

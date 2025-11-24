@@ -190,6 +190,118 @@ class UC_Admin {
     }
     
     /**
+     * AJAX: Test connection to remote site
+     */
+    public static function ajax_test_connection() {
+        check_ajax_referer('uc_admin_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => __('Insufficient permissions', 'update-controller')));
+        }
+        
+        $site_id = isset($_POST['site_id']) ? intval($_POST['site_id']) : 0;
+        
+        if (empty($site_id)) {
+            wp_send_json_error(array('message' => __('Invalid site ID', 'update-controller')));
+        }
+        
+        $site = UC_Database::get_site($site_id);
+        
+        if (!$site) {
+            wp_send_json_error(array('message' => __('Site not found', 'update-controller')));
+        }
+        
+        $site_url = rtrim($site->site_url, '/');
+        
+        // Test 1: Check if companion plugin endpoint is accessible
+        $test_url = $site_url . '/wp-json/uc-companion/v1/test';
+        $test_response = wp_remote_get($test_url, array('timeout' => 10));
+        
+        if (is_wp_error($test_response)) {
+            wp_send_json_error(array(
+                'message' => sprintf(__('Connection failed: %s', 'update-controller'), $test_response->get_error_message()),
+                'details' => array(
+                    'test_url' => $test_url,
+                    'error' => $test_response->get_error_message()
+                )
+            ));
+        }
+        
+        $test_code = wp_remote_retrieve_response_code($test_response);
+        $test_body = wp_remote_retrieve_body($test_response);
+        
+        if ($test_code !== 200) {
+            wp_send_json_error(array(
+                'message' => sprintf(__('Companion plugin test failed (HTTP %d). Plugin may not be installed or activated.', 'update-controller'), $test_code),
+                'details' => array(
+                    'test_url' => $test_url,
+                    'http_code' => $test_code,
+                    'response' => substr($test_body, 0, 200)
+                )
+            ));
+        }
+        
+        // Test 2: Try authentication
+        $password = UC_Encryption::decrypt($site->password);
+        $auth_url = $site_url . '/wp-json/wp/v2/users/me';
+        $auth_response = wp_remote_post($auth_url, array(
+            'headers' => array(
+                'Authorization' => 'Basic ' . base64_encode($site->username . ':' . $password)
+            ),
+            'timeout' => 10
+        ));
+        
+        if (is_wp_error($auth_response)) {
+            wp_send_json_success(array(
+                'message' => __('Companion plugin is active, but authentication failed.', 'update-controller'),
+                'details' => array(
+                    'companion_status' => 'OK',
+                    'auth_status' => 'FAILED',
+                    'auth_error' => $auth_response->get_error_message()
+                )
+            ));
+        }
+        
+        $auth_code = wp_remote_retrieve_response_code($auth_response);
+        
+        if ($auth_code !== 200) {
+            $auth_message = '';
+            switch ($auth_code) {
+                case 401:
+                    $auth_message = __('Invalid credentials. Check username and Application Password.', 'update-controller');
+                    break;
+                case 403:
+                    $auth_message = __('Access forbidden. Check Application Passwords are enabled.', 'update-controller');
+                    break;
+                default:
+                    $auth_message = sprintf(__('Authentication returned HTTP %d', 'update-controller'), $auth_code);
+            }
+            
+            wp_send_json_error(array(
+                'message' => __('Companion plugin is active, but authentication failed: ', 'update-controller') . $auth_message,
+                'details' => array(
+                    'companion_status' => 'OK',
+                    'auth_status' => 'FAILED',
+                    'auth_code' => $auth_code
+                )
+            ));
+        }
+        
+        // Both tests passed!
+        $test_data = json_decode($test_body, true);
+        wp_send_json_success(array(
+            'message' => __('✓ Connection successful! Companion plugin is active and authentication works.', 'update-controller'),
+            'details' => array(
+                'companion_status' => 'OK',
+                'auth_status' => 'OK',
+                'companion_version' => isset($test_data['version']) ? $test_data['version'] : 'unknown',
+                'wp_version' => isset($test_data['wp_version']) ? $test_data['wp_version'] : 'unknown',
+                'site_url' => isset($test_data['site_url']) ? $test_data['site_url'] : $site_url
+            )
+        ));
+    }
+    
+    /**
      * AJAX: Add plugin
      */
     public static function ajax_add_plugin() {

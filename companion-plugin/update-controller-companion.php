@@ -32,6 +32,13 @@ class UC_Companion {
      * Register REST API routes
      */
     public static function register_routes() {
+        // Test connection endpoint (no auth required)
+        register_rest_route('uc-companion/v1', '/test', array(
+            'methods' => 'GET',
+            'callback' => array(__CLASS__, 'test_connection'),
+            'permission_callback' => '__return_true'
+        ));
+        
         // Install/Update plugin endpoint
         register_rest_route('uc-companion/v1', '/install-plugin', array(
             'methods' => 'POST',
@@ -52,6 +59,19 @@ class UC_Companion {
             'callback' => array(__CLASS__, 'deactivate_plugin'),
             'permission_callback' => array(__CLASS__, 'check_permission')
         ));
+    }
+    
+    /**
+     * Test connection endpoint
+     */
+    public static function test_connection() {
+        return array(
+            'success' => true,
+            'message' => 'Update Controller Companion is active and ready',
+            'version' => '1.0.0',
+            'wp_version' => get_bloginfo('version'),
+            'site_url' => get_site_url()
+        );
     }
     
     /**
