@@ -99,13 +99,24 @@ class UC_Updater {
         }
         
         // Download plugin file from source
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Step 0 - Downloading plugin from ' . $plugin->update_source);
+        }
+        
         $plugin_file = self::download_plugin($plugin->update_source, $plugin->source_type);
         
         if (is_wp_error($plugin_file)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Update Controller: Step 0 FAILED - Download error: ' . $plugin_file->get_error_message());
+            }
             return array(
                 'success' => false,
                 'message' => $plugin_file->get_error_message()
             );
+        }
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Step 0 SUCCESS - Plugin downloaded to ' . $plugin_file);
         }
         
         // Upload and install plugin on remote site
@@ -171,43 +182,85 @@ class UC_Updater {
         // Decrypt password
         $password = UC_Encryption::decrypt($site->password);
         
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Step 1 - Starting authentication to ' . $site->site_url);
+        }
+        
         // Authenticate with WordPress site
         $auth_result = self::authenticate_site($site->site_url, $site->username, $password);
         
         if (is_wp_error($auth_result)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Update Controller: Step 1 FAILED - Authentication error: ' . $auth_result->get_error_message());
+            }
             return array(
                 'success' => false,
                 'message' => __('Authentication failed: ', 'update-controller') . $auth_result->get_error_message()
             );
         }
         
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Step 1 SUCCESS - Authentication successful');
+        }
+        
         $cookie = $auth_result;
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Step 2 - Starting file upload');
+        }
         
         // Upload plugin file
         $upload_result = self::upload_plugin_file($site->site_url, $plugin_file, $cookie);
         
         if (is_wp_error($upload_result)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Update Controller: Step 2 FAILED - Upload error: ' . $upload_result->get_error_message());
+            }
             return array(
                 'success' => false,
                 'message' => __('Upload failed: ', 'update-controller') . $upload_result->get_error_message()
             );
         }
         
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Step 2 SUCCESS - File uploaded');
+        }
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Step 3 - Deactivating plugin');
+        }
+        
         // Deactivate plugin before update
         self::toggle_plugin($site->site_url, $plugin->plugin_slug, 'deactivate', $cookie);
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Step 4 - Installing plugin');
+        }
         
         // Install/update plugin
         $install_result = self::install_plugin_from_upload($site->site_url, $upload_result, $cookie);
         
         if (is_wp_error($install_result)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Update Controller: Step 4 FAILED - Installation error: ' . $install_result->get_error_message());
+            }
             return array(
                 'success' => false,
                 'message' => __('Installation failed: ', 'update-controller') . $install_result->get_error_message()
             );
         }
         
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Step 4 SUCCESS - Plugin installed');
+            error_log('Update Controller: Step 5 - Reactivating plugin');
+        }
+        
         // Reactivate plugin
         self::toggle_plugin($site->site_url, $plugin->plugin_slug, 'activate', $cookie);
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: All steps completed successfully');
+        }
         
         return array(
             'success' => true,
