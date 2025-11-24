@@ -152,8 +152,8 @@ jQuery(document).ready(function($) {
     var currentPluginId = null;
     
     // Toggle source method (URL vs Upload)
-    $(document).on('change', '#uc-source-method', function() {
-        var method = $(this).val();
+    function toggleSourceMethod() {
+        var method = $('#uc-source-method').val();
         if (method === 'upload') {
             $('#uc-source-url-fields').hide();
             $('#uc-source-upload-fields').show();
@@ -163,6 +163,10 @@ jQuery(document).ready(function($) {
             $('#uc-source-upload-fields').hide();
             $('#uc-update-source').prop('required', true);
         }
+    }
+    
+    $(document).on('change', '#uc-source-method', function() {
+        toggleSourceMethod();
     });
     
     // Change file button
@@ -176,7 +180,8 @@ jQuery(document).ready(function($) {
         $('#uc-plugin-modal-title').text('Add Plugin Configuration');
         $('#uc-plugin-form')[0].reset();
         $('#uc-plugin-id').val('');
-        $('#uc-source-method').val('url').trigger('change');
+        $('#uc-source-method').val('url');
+        toggleSourceMethod(); // Initialize visibility
         $('#uc-current-file-info').hide();
         $('#uc-auto-update').prop('checked', true);
         $('#uc-plugin-modal').fadeIn();
@@ -204,12 +209,14 @@ jQuery(document).ready(function($) {
         
         // Check if it's a file upload (local:// prefix) or URL
         if (updateSource && updateSource.startsWith('local://')) {
-            $('#uc-source-method').val('upload').trigger('change');
+            $('#uc-source-method').val('upload');
+            toggleSourceMethod(); // Update visibility
             var fileName = updateSource.replace('local://', '');
             $('#uc-current-file-name').text(fileName);
             $('#uc-current-file-info').show();
         } else {
-            $('#uc-source-method').val('url').trigger('change');
+            $('#uc-source-method').val('url');
+            toggleSourceMethod(); // Update visibility
             $('#uc-update-source').val(updateSource);
             $('#uc-source-type').val(sourceType);
         }
