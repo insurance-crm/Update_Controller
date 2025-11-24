@@ -140,3 +140,21 @@
     color: #721c24;
     border: 1px solid #f5c6cb;
 }
+
+/* Test connection button */
+.uc-test-connection {
+    background: #0073aa !important;
+    border-color: #0073aa !important;
+    color: #fff !important;
+}
+
+.uc-test-connection:hover {
+    background: #005a87 !important;
+    border-color: #005a87 !important;
+}
+
+.uc-test-connection:disabled {
+    background: #ccc !important;
+    border-color: #ccc !important;
+    cursor: not-allowed !important;
+}
