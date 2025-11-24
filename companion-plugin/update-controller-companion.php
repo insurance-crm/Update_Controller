@@ -148,34 +148,79 @@ class UC_Companion {
         require_once(ABSPATH . 'wp-admin/includes/class-wp-upgrader.php');
         require_once(ABSPATH . 'wp-admin/includes/plugin-install.php');
         
-        // Create upgrader instance
-        $upgrader = new Plugin_Upgrader(new WP_Ajax_Upgrader_Skin());
+        // Initialize filesystem
+        WP_Filesystem();
+        global $wp_filesystem;
         
-        // Install/upgrade the plugin
-        $result = $upgrader->install($file_path, array('overwrite_package' => true));
+        // Unzip to temporary directory to check plugin info
+        $temp_dir = get_temp_dir() . 'uc-plugin-' . uniqid();
+        $unzip_result = unzip_file($file_path, $temp_dir);
         
-        // Clean up
+        if (is_wp_error($unzip_result)) {
+            // Clean up
+            if (get_transient('uc_plugin_file_' . $file_id)) {
+                delete_transient('uc_plugin_file_' . $file_id);
+                @unlink($file_path);
+            }
+            return new WP_Error('unzip_failed', $unzip_result->get_error_message(), array('status' => 500));
+        }
+        
+        // Get plugin folder name and main file
+        $plugin_folder = '';
+        $plugin_main_file = '';
+        
+        $folders = glob($temp_dir . '/*', GLOB_ONLYDIR);
+        if (!empty($folders)) {
+            $plugin_folder = basename($folders[0]);
+            
+            // Find the main plugin file
+            $php_files = glob($folders[0] . '/*.php');
+            foreach ($php_files as $php_file) {
+                $plugin_data = get_plugin_data($php_file, false, false);
+                if (!empty($plugin_data['Name'])) {
+                    $plugin_main_file = $plugin_folder . '/' . basename($php_file);
+                    break;
+                }
+            }
+        }
+        
+        // Check if plugin already exists (update) or new install
+        $is_update = false;
+        $plugin_dir = WP_PLUGIN_DIR . '/' . $plugin_folder;
+        
+        if ($plugin_main_file && file_exists(WP_PLUGIN_DIR . '/' . $plugin_main_file)) {
+            $is_update = true;
+            
+            // Remove old plugin directory
+            if (file_exists($plugin_dir)) {
+                $wp_filesystem->delete($plugin_dir, true);
+            }
+        }
+        
+        // Move the plugin to the plugins directory
+        $move_result = $wp_filesystem->move($folders[0], $plugin_dir, true);
+        
+        // Clean up temp directory
+        $wp_filesystem->delete($temp_dir, true);
+        
+        // Clean up uploaded file
         if (get_transient('uc_plugin_file_' . $file_id)) {
-            // Delete transient and temp file
             delete_transient('uc_plugin_file_' . $file_id);
             @unlink($file_path);
         } else {
-            // Delete from media library
             wp_delete_attachment($file_id, true);
         }
         
-        if (is_wp_error($result)) {
-            return new WP_Error('install_failed', $result->get_error_message(), array('status' => 500));
-        }
-        
-        if ($result === false) {
-            return new WP_Error('install_failed', __('Plugin installation failed', 'update-controller-companion'), array('status' => 500));
+        if (!$move_result) {
+            return new WP_Error('install_failed', __('Failed to move plugin to plugins directory', 'update-controller-companion'), array('status' => 500));
         }
         
         return array(
             'success' => true,
-            'message' => __('Plugin installed successfully', 'update-controller-companion'),
-            'plugin_file' => $upgrader->plugin_info()
+            'message' => $is_update ? __('Plugin updated successfully', 'update-controller-companion') : __('Plugin installed successfully', 'update-controller-companion'),
+            'plugin_file' => $plugin_main_file,
+            'is_update' => $is_update,
+            'plugin_folder' => $plugin_folder
         );
     }
     
