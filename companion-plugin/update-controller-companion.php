@@ -39,6 +39,13 @@ class UC_Companion {
             'permission_callback' => '__return_true'
         ));
         
+        // Upload plugin file endpoint (bypasses media library)
+        register_rest_route('uc-companion/v1', '/upload-plugin', array(
+            'methods' => 'POST',
+            'callback' => array(__CLASS__, 'upload_plugin'),
+            'permission_callback' => array(__CLASS__, 'check_permission')
+        ));
+        
         // Install/Update plugin endpoint
         register_rest_route('uc-companion/v1', '/install-plugin', array(
             'methods' => 'POST',
@@ -82,6 +89,38 @@ class UC_Companion {
     }
     
     /**
+     * Upload plugin file directly (bypasses media library upload permissions)
+     */
+    public static function upload_plugin($request) {
+        $file_data = $request->get_body();
+        
+        if (empty($file_data)) {
+            return new WP_Error('missing_file', __('Missing file data', 'update-controller-companion'), array('status' => 400));
+        }
+        
+        // Create temp file
+        $temp_file = wp_tempnam('plugin-upload-');
+        
+        // Write the uploaded data to temp file
+        $bytes_written = file_put_contents($temp_file, $file_data);
+        
+        if ($bytes_written === false) {
+            return new WP_Error('write_failed', __('Failed to write uploaded file', 'update-controller-companion'), array('status' => 500));
+        }
+        
+        // Store file path in transient for later use
+        $file_id = md5($temp_file . time());
+        set_transient('uc_plugin_file_' . $file_id, $temp_file, HOUR_IN_SECONDS);
+        
+        return array(
+            'success' => true,
+            'file_id' => $file_id,
+            'file_size' => $bytes_written,
+            'message' => __('Plugin file uploaded successfully', 'update-controller-companion')
+        );
+    }
+    
+    /**
      * Install or update a plugin
      */
     public static function install_plugin($request) {
@@ -91,11 +130,16 @@ class UC_Companion {
             return new WP_Error('missing_param', __('Missing file_id parameter', 'update-controller-companion'), array('status' => 400));
         }
         
-        // Get the uploaded file from media library
-        $file_path = get_attached_file($file_id);
+        // Try to get file path from transient (new method)
+        $file_path = get_transient('uc_plugin_file_' . $file_id);
+        
+        // If not found, try old method (media library)
+        if (!$file_path) {
+            $file_path = get_attached_file($file_id);
+        }
         
         if (!$file_path || !file_exists($file_path)) {
-            return new WP_Error('file_not_found', __('Uploaded file not found', 'update-controller-companion'), array('status' => 404));
+            return new WP_Error('file_not_found', __('Uploaded file not found or expired', 'update-controller-companion'), array('status' => 404));
         }
         
         // Include required WordPress files
@@ -110,8 +154,15 @@ class UC_Companion {
         // Install/upgrade the plugin
         $result = $upgrader->install($file_path, array('overwrite_package' => true));
         
-        // Delete the temporary file from media library
-        wp_delete_attachment($file_id, true);
+        // Clean up
+        if (get_transient('uc_plugin_file_' . $file_id)) {
+            // Delete transient and temp file
+            delete_transient('uc_plugin_file_' . $file_id);
+            @unlink($file_path);
+        } else {
+            // Delete from media library
+            wp_delete_attachment($file_id, true);
+        }
         
         if (is_wp_error($result)) {
             return new WP_Error('install_failed', $result->get_error_message(), array('status' => 500));

@@ -265,8 +265,8 @@ class UC_Updater {
     /**
      * Upload plugin file to remote site
      * 
-     * Uploads the plugin ZIP file to the remote site's media library.
-     * The companion plugin will use this file for installation.
+     * Uploads the plugin ZIP file directly to companion plugin endpoint,
+     * bypassing media library permission issues.
      */
     private static function upload_plugin_file($site_url, $file_path, $auth_headers) {
         $site_url = rtrim($site_url, '/');
@@ -276,10 +276,40 @@ class UC_Updater {
         $file_name = basename($file_path);
         
         if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log('Update Controller: Uploading plugin file to ' . $site_url);
+            error_log('Update Controller: Uploading plugin file to ' . $site_url . ' via companion plugin');
         }
         
-        // Upload via REST API to media library
+        // Try new method first: Upload via companion plugin (bypasses media library)
+        $response = wp_remote_post($site_url . '/wp-json/uc-companion/v1/upload-plugin', array(
+            'headers' => array_merge($auth_headers, array(
+                'Content-Type' => 'application/zip'
+            )),
+            'body' => $file_content,
+            'timeout' => 60
+        ));
+        
+        if (!is_wp_error($response)) {
+            $code = wp_remote_retrieve_response_code($response);
+            $body_text = wp_remote_retrieve_body($response);
+            $body = json_decode($body_text, true);
+            
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Update Controller: Companion upload response code: ' . $code);
+            }
+            
+            if ($code === 200 && isset($body['file_id'])) {
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log('Update Controller: Upload via companion successful, file ID: ' . $body['file_id']);
+                }
+                return array('id' => $body['file_id'], 'method' => 'companion');
+            }
+        }
+        
+        // Fallback to media library method
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Companion upload unavailable, falling back to media library');
+        }
+        
         $response = wp_remote_post($site_url . '/wp-json/wp/v2/media', array(
             'headers' => array_merge($auth_headers, array(
                 'Content-Disposition' => 'attachment; filename=' . $file_name,
@@ -301,7 +331,7 @@ class UC_Updater {
         $body = json_decode($body_text, true);
         
         if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log('Update Controller: Upload response code: ' . $code);
+            error_log('Update Controller: Media library upload response code: ' . $code);
             error_log('Update Controller: Upload response: ' . substr($body_text, 0, 500));
         }
         
@@ -315,12 +345,12 @@ class UC_Updater {
         
         if (isset($body['id'])) {
             if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('Update Controller: Upload successful, media ID: ' . $body['id']);
+                error_log('Update Controller: Media library upload successful, media ID: ' . $body['id']);
             }
-            return $body;
+            return array('id' => $body['id'], 'method' => 'media');
         }
         
-        return new WP_Error('upload_failed', __('Failed to upload plugin file - no media ID returned', 'update-controller'));
+        return new WP_Error('upload_failed', __('Failed to upload plugin file - no file ID returned', 'update-controller'));
     }
     
     /**
