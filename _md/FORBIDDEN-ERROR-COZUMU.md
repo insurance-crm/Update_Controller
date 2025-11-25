@@ -1,9 +1,47 @@
 # "Forbidden" Hatasının Çözümü / Solution for "Forbidden" Error
 
 ## Sorun / Problem
-Update işlemi sırasında "Forbidden" hatası alıyorsanız, bu genellikle uzak WordPress sitesine erişim izni olmadığı anlamına gelir.
+Update işlemi sırasında "Forbidden" hatası alabilirsiniz. Bu hata iki farklı aşamada oluşabilir:
 
-If you get a "Forbidden" error during update, it usually means you don't have permission to access the remote WordPress site.
+1. **Step 0 (Download)**: Plugin dosyası kaynak URL'den indirilirken (örn: balkay.net veya GitHub)
+2. **Step 1+ (Authentication/Upload)**: Uzak WordPress sitesine erişim sırasında
+
+If you get a "Forbidden" error during update, it can occur at two different stages:
+
+1. **Step 0 (Download)**: When downloading the plugin file from source URL (e.g., balkay.net or GitHub)
+2. **Step 1+ (Authentication/Upload)**: When accessing the remote WordPress site
+
+---
+
+## Step 0'da Forbidden Hatası / Forbidden Error at Step 0
+
+### Sorun / Problem
+```
+Update Controller: Step 0 FAILED - Download error: Forbidden
+```
+
+Bu hata, kaynak sunucunun dosya indirme isteğini reddettiği anlamına gelir.
+This error means the source server rejected the download request.
+
+### Çözüm (v1.0.1+) / Solution (v1.0.1+)
+**Türkçe:** Plugin güncellendi ve artık User-Agent header'ı ile istek gönderiyor. Bu güncellemeden sonra çoğu sunucu dosya indirmeye izin verecektir.
+
+**English:** The plugin has been updated to send proper User-Agent headers with download requests. Most servers will now allow file downloads.
+
+### Sunucu Tarafı Kontroller / Server-Side Checks
+Eğer hala Forbidden hatası alıyorsanız:
+
+1. **Dosyanın URL'sini kontrol edin**: Tarayıcıda URL'yi açarak dosyanın erişilebilir olduğunu doğrulayın
+2. **Hotlink korumasını kontrol edin**: Bazı sunucular dış sitelerden dosya indirmeyi engeller
+3. **IP engellemesini kontrol edin**: Sunucu IP adresinizi engellemiş olabilir
+4. **.htaccess kurallarını kontrol edin**: Sunucudaki .htaccess dosyası ZIP dosyalarını engelliyor olabilir
+
+If you still get Forbidden error:
+
+1. **Check the file URL**: Verify the file is accessible by opening the URL in a browser
+2. **Check hotlink protection**: Some servers block file downloads from external sites
+3. **Check IP blocking**: The server may have blocked your IP address
+4. **Check .htaccess rules**: The .htaccess file on the server may be blocking ZIP files
 
 ---
 
