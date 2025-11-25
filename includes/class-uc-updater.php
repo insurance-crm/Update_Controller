@@ -233,7 +233,7 @@ class UC_Updater {
             'Referer' => $source_domain ? $source_domain . '/' : home_url(),
             'Sec-Fetch-Dest' => 'document',
             'Sec-Fetch-Mode' => 'navigate',
-            'Sec-Fetch-Site' => 'same-origin',
+            'Sec-Fetch-Site' => 'cross-site',
             'Sec-Fetch-User' => '?1',
         );
         
