@@ -204,20 +204,46 @@ class UC_Updater {
      * Some servers block requests without proper User-Agent or Referer headers.
      * This method uses wp_remote_get with customized headers to avoid "Forbidden" errors.
      * 
+     * Common causes of 403 Forbidden:
+     * - Hotlink protection (Referer must match source domain)
+     * - User-Agent filtering (non-browser requests blocked)
+     * - Security plugins (Wordfence, Sucuri, etc.)
+     * - Server mod_security rules
+     * 
      * @param string $url URL to download
      * @return string|WP_Error Path to temporary file or error
      */
     private static function download_file_with_headers($url) {
-        // Prepare headers to mimic a browser request
+        // Parse URL to get the source domain for Referer header
+        $parsed_url = wp_parse_url($url);
+        $source_domain = isset($parsed_url['scheme']) && isset($parsed_url['host']) 
+            ? $parsed_url['scheme'] . '://' . $parsed_url['host'] 
+            : '';
+        
+        // Prepare headers to mimic a real browser request
+        // Using a common browser User-Agent to avoid being blocked by security plugins
         $headers = array(
-            'User-Agent' => 'WordPress/' . get_bloginfo('version') . '; ' . get_bloginfo('url') . '; Update Controller/' . UPDATE_CONTROLLER_VERSION,
-            'Accept' => 'application/zip, application/octet-stream, */*',
+            'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
             'Accept-Language' => 'en-US,en;q=0.9',
-            'Referer' => home_url(),
+            'Accept-Encoding' => 'gzip, deflate, br',
+            'Connection' => 'keep-alive',
+            'Upgrade-Insecure-Requests' => '1',
+            // Use source domain as Referer to bypass hotlink protection
+            'Referer' => $source_domain ? $source_domain . '/' : home_url(),
+            'Sec-Fetch-Dest' => 'document',
+            'Sec-Fetch-Mode' => 'navigate',
+            'Sec-Fetch-Site' => 'same-origin',
+            'Sec-Fetch-User' => '?1',
         );
         
         // Allow filtering of download headers
         $headers = apply_filters('uc_download_headers', $headers, $url);
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Downloading with browser-like headers from: ' . $url);
+            error_log('Update Controller: Referer set to: ' . $headers['Referer']);
+        }
         
         // Make the request
         $response = wp_remote_get($url, array(

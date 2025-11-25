@@ -23,25 +23,72 @@ Update Controller: Step 0 FAILED - Download error: Forbidden
 Bu hata, kaynak sunucunun dosya indirme isteğini reddettiği anlamına gelir.
 This error means the source server rejected the download request.
 
-### Çözüm (v1.0.1+) / Solution (v1.0.1+)
-**Türkçe:** Plugin güncellendi ve artık User-Agent header'ı ile istek gönderiyor. Bu güncellemeden sonra çoğu sunucu dosya indirmeye izin verecektir.
+### Neden Oluyor? / Why Does This Happen?
 
-**English:** The plugin has been updated to send proper User-Agent headers with download requests. Most servers will now allow file downloads.
+**Türkçe:**
+403 Forbidden hatası genellikle şu sebeplerden oluşur:
+
+1. **Hotlink Koruması**: Sunucu, farklı domain'lerden gelen istekleri engelliyor
+2. **User-Agent Filtreleme**: Sunucu, tarayıcı olmayan istekleri engelliyor  
+3. **Güvenlik Eklentileri**: Wordfence, Sucuri gibi eklentiler otomatik indirmeleri engelliyor
+4. **mod_security Kuralları**: Sunucu seviyesinde güvenlik kuralları indirmeyi engelliyor
+
+**English:**
+403 Forbidden error usually occurs due to:
+
+1. **Hotlink Protection**: Server blocks requests from different domains
+2. **User-Agent Filtering**: Server blocks non-browser requests
+3. **Security Plugins**: Plugins like Wordfence, Sucuri block automated downloads
+4. **mod_security Rules**: Server-level security rules block downloads
+
+### Çözüm (v1.0.2+) / Solution (v1.0.2+)
+
+**Türkçe:** Plugin artık gerçek bir tarayıcı gibi davranarak istek gönderiyor:
+- Chrome tarayıcı User-Agent header'ı kullanıyor
+- Kaynak domain'i Referer olarak gönderiyor (hotlink korumasını aşmak için)
+- Tarayıcı güvenlik header'ları ekliyor (Sec-Fetch-*)
+
+**English:** The plugin now mimics a real browser request:
+- Uses Chrome browser User-Agent header
+- Sends source domain as Referer (to bypass hotlink protection)
+- Adds browser security headers (Sec-Fetch-*)
 
 ### Sunucu Tarafı Kontroller / Server-Side Checks
-Eğer hala Forbidden hatası alıyorsanız:
+Eğer hala Forbidden hatası alıyorsanız, kaynak sunucuda (balkay.net) şunları kontrol edin:
 
 1. **Dosyanın URL'sini kontrol edin**: Tarayıcıda URL'yi açarak dosyanın erişilebilir olduğunu doğrulayın
-2. **Hotlink korumasını kontrol edin**: Bazı sunucular dış sitelerden dosya indirmeyi engeller
+2. **Hotlink korumasını devre dışı bırakın**: cPanel veya .htaccess'te hotlink koruması varsa ZIP dosyaları için izin verin
 3. **IP engellemesini kontrol edin**: Sunucu IP adresinizi engellemiş olabilir
 4. **.htaccess kurallarını kontrol edin**: Sunucudaki .htaccess dosyası ZIP dosyalarını engelliyor olabilir
+5. **Güvenlik eklentisini kontrol edin**: Wordfence veya Sucuri gibi eklentiler indirmeyi engelliyor olabilir
 
-If you still get Forbidden error:
+**Kaynak sunucudaki .htaccess dosyasına eklenebilecek izin kuralı:**
+```apache
+# Allow ZIP file downloads
+<FilesMatch "\.zip$">
+    Order allow,deny
+    Allow from all
+    Require all granted
+</FilesMatch>
+```
+
+If you still get Forbidden error, check on the source server (balkay.net):
 
 1. **Check the file URL**: Verify the file is accessible by opening the URL in a browser
-2. **Check hotlink protection**: Some servers block file downloads from external sites
+2. **Disable hotlink protection**: If hotlink protection is enabled in cPanel or .htaccess, allow ZIP files
 3. **Check IP blocking**: The server may have blocked your IP address
 4. **Check .htaccess rules**: The .htaccess file on the server may be blocking ZIP files
+5. **Check security plugins**: Wordfence or Sucuri plugins may be blocking downloads
+
+**Rule to add to .htaccess on source server:**
+```apache
+# Allow ZIP file downloads
+<FilesMatch "\.zip$">
+    Order allow,deny
+    Allow from all
+    Require all granted
+</FilesMatch>
+```
 
 ---
 
