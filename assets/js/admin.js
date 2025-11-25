@@ -392,9 +392,14 @@ jQuery(document).ready(function($) {
     // Updates Management
     // ============================================
     
-    // Open add update package modal
-    $('#uc-add-update-btn').on('click', function() {
-        $('#uc-update-package-form')[0].reset();
+    // Open add update package modal - use event delegation for reliability
+    $(document).on('click', '#uc-add-update-btn', function(e) {
+        e.preventDefault();
+        console.log('Upload New Package button clicked');
+        var $form = $('#uc-update-package-form');
+        if ($form.length) {
+            $form[0].reset();
+        }
         $('#uc-upload-progress').hide();
         $('#uc-upload-btn').prop('disabled', false);
         $('#uc-update-package-modal').fadeIn();
