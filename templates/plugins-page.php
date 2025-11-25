@@ -26,7 +26,13 @@
                     <?php
                     $site = UC_Database::get_site($plugin->site_id);
                     ?>
-                    <tr data-plugin-id="<?php echo esc_attr($plugin->id); ?>">
+                    <tr data-plugin-id="<?php echo esc_attr($plugin->id); ?>" 
+                        data-site-id="<?php echo esc_attr($plugin->site_id); ?>"
+                        data-plugin-name="<?php echo esc_attr($plugin->plugin_name); ?>"
+                        data-plugin-slug="<?php echo esc_attr($plugin->plugin_slug); ?>"
+                        data-update-source="<?php echo esc_attr($plugin->update_source); ?>"
+                        data-source-type="<?php echo esc_attr($plugin->source_type); ?>"
+                        data-auto-update="<?php echo esc_attr($plugin->auto_update); ?>">
                         <td><?php echo $site ? esc_html($site->site_name) : '-'; ?></td>
                         <td><?php echo esc_html($plugin->plugin_name); ?></td>
                         <td><code><?php echo esc_html($plugin->plugin_slug); ?></code></td>
@@ -86,18 +92,61 @@
             </p>
             
             <p>
-                <label for="uc-update-source"><?php echo esc_html__('Update Source URL', 'update-controller'); ?></label>
-                <input type="url" id="uc-update-source" name="update_source" class="regular-text" placeholder="https://example.com/plugin.zip" required>
-                <span class="description"><?php echo esc_html__('Direct download URL or GitHub repository URL', 'update-controller'); ?></span>
-            </p>
-            
-            <p>
-                <label for="uc-source-type"><?php echo esc_html__('Source Type', 'update-controller'); ?></label>
-                <select id="uc-source-type" name="source_type" class="regular-text">
-                    <option value="web"><?php echo esc_html__('Web URL', 'update-controller'); ?></option>
-                    <option value="github"><?php echo esc_html__('GitHub Repository', 'update-controller'); ?></option>
+                <label for="uc-source-method"><?php echo esc_html__('Update Source', 'update-controller'); ?></label>
+                <select id="uc-source-method" class="regular-text">
+                    <option value="url"><?php echo esc_html__('URL (External Link)', 'update-controller'); ?></option>
+                    <option value="package"><?php echo esc_html__('Local Package (Uploaded)', 'update-controller'); ?></option>
                 </select>
             </p>
+            
+            <div id="uc-source-url-fields">
+                <p>
+                    <label for="uc-update-source"><?php echo esc_html__('Update Source URL', 'update-controller'); ?></label>
+                    <input type="url" id="uc-update-source" name="update_source" class="regular-text" placeholder="https://example.com/plugin.zip">
+                    <span class="description"><?php echo esc_html__('Direct download URL or GitHub repository URL', 'update-controller'); ?></span>
+                </p>
+                
+                <p>
+                    <label for="uc-source-type"><?php echo esc_html__('Source Type', 'update-controller'); ?></label>
+                    <select id="uc-source-type" name="source_type" class="regular-text">
+                        <option value="web"><?php echo esc_html__('Web URL', 'update-controller'); ?></option>
+                        <option value="github"><?php echo esc_html__('GitHub Repository', 'update-controller'); ?></option>
+                    </select>
+                </p>
+            </div>
+            
+            <div id="uc-source-package-fields" style="display:none;">
+                <p>
+                    <label for="uc-package-select"><?php echo esc_html__('Select Package', 'update-controller'); ?></label>
+                    <?php if (!empty($updates)) : ?>
+                    <select id="uc-package-select" class="regular-text">
+                        <option value=""><?php echo esc_html__('-- Select a package --', 'update-controller'); ?></option>
+                        <?php foreach ($updates as $update) : ?>
+                            <option value="<?php echo esc_attr($update->file_url); ?>" data-name="<?php echo esc_attr($update->package_name); ?>">
+                                <?php echo esc_html($update->package_name); ?>
+                                <?php if ($update->version) : ?>
+                                    (v<?php echo esc_html($update->version); ?>)
+                                <?php endif; ?>
+                                - <?php echo esc_html(size_format($update->file_size)); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <?php else : ?>
+                    <select id="uc-package-select" class="regular-text" disabled>
+                        <option value=""><?php echo esc_html__('No packages uploaded yet', 'update-controller'); ?></option>
+                    </select>
+                    <?php endif; ?>
+                    <br>
+                    <span class="description">
+                        <?php if (!empty($updates)) : ?>
+                            <?php echo esc_html__('Select from packages uploaded in the Updates section.', 'update-controller'); ?>
+                        <?php else : ?>
+                            <strong style="color: #d63638;"><?php echo esc_html__('You need to upload packages first!', 'update-controller'); ?></strong>
+                        <?php endif; ?>
+                        <a href="<?php echo esc_url(admin_url('admin.php?page=update-controller-updates')); ?>"><?php echo esc_html__('Go to Updates page to upload packages', 'update-controller'); ?></a>
+                    </span>
+                </p>
+            </div>
             
             <p>
                 <label>

@@ -1,0 +1,251 @@
+# "Forbidden" Hatasının Çözümü / Solution for "Forbidden" Error
+
+## Sorun / Problem
+Update işlemi sırasında "Forbidden" hatası alıyorsanız, bu genellikle uzak WordPress sitesine erişim izni olmadığı anlamına gelir.
+
+If you get a "Forbidden" error during update, it usually means you don't have permission to access the remote WordPress site.
+
+---
+
+## Adım Adım Çözüm / Step-by-Step Solution
+
+### 1. Companion Plugin'i Kontrol Edin / Check Companion Plugin
+
+**Türkçe:**
+1. Uzak WordPress sitesine giriş yapın (güncellenmesini istediğiniz site)
+2. **Eklentiler** menüsüne gidin
+3. "Update Controller Companion" eklentisinin **yüklü ve aktif** olduğunu kontrol edin
+4. Eğer yüklü değilse:
+   - `companion-plugin/update-controller-companion.php` dosyasını kopyalayın
+   - Uzak sitede `/wp-content/plugins/update-controller-companion/` dizinine yükleyin
+   - Eklentiyi etkinleştirin
+
+**English:**
+1. Log into the remote WordPress site (the site you want to update)
+2. Go to **Plugins** menu
+3. Check that "Update Controller Companion" plugin is **installed and active**
+4. If not installed:
+   - Copy the `companion-plugin/update-controller-companion.php` file
+   - Upload to `/wp-content/plugins/update-controller-companion/` on the remote site
+   - Activate the plugin
+
+---
+
+### 2. Application Password Oluşturun / Create Application Password
+
+**Türkçe:**
+1. Uzak WordPress sitesinde **Kullanıcılar > Profil** bölümüne gidin
+2. Aşağı kaydırıp **Application Passwords** bölümünü bulun
+3. Yeni bir uygulama şifresi oluşturun (isim: "Update Controller")
+4. Oluşturulan şifreyi kopyalayın (BOŞLUKLARLA BİRLİKTE)
+5. Update Controller sitesinde:
+   - **Update Controller > Sites** menüsüne gidin
+   - Site'yi düzenleyin (Edit)
+   - Kopyaladığınız Application Password'ü yapıştırın
+   - Kaydedin (Save)
+
+**English:**
+1. On the remote WordPress site, go to **Users > Profile**
+2. Scroll down to find **Application Passwords** section
+3. Create a new application password (name: "Update Controller")
+4. Copy the generated password (WITH SPACES)
+5. On Update Controller site:
+   - Go to **Update Controller > Sites**
+   - Edit the site
+   - Paste the Application Password
+   - Save
+
+**UYARI / WARNING:** Normal WordPress şifrenizi KULLANMAYIN! Application Password kullanmalısınız.
+Do NOT use your regular WordPress password! Use Application Password.
+
+---
+
+### 3. Bağlantıyı Test Edin / Test Connection
+
+**Türkçe:**
+1. **Update Controller > Sites** menüsüne gidin
+2. Site satırındaki **Test** düğmesine tıklayın
+3. Sonucu kontrol edin:
+   - ✅ **Başarılı**: "Connection successful! Companion plugin is active..."
+   - ❌ **Başarısız**: Hata mesajını okuyun
+
+**English:**
+1. Go to **Update Controller > Sites**
+2. Click the **Test** button on the site row
+3. Check the result:
+   - ✅ **Success**: "Connection successful! Companion plugin is active..."
+   - ❌ **Failed**: Read the error message
+
+---
+
+### 4. Debug Log'ları Kontrol Edin / Check Debug Logs
+
+**Türkçe:**
+
+Yeni güncellenmiş kodla birlikte, debug log'ları artık hangi adımda hata oluştuğunu gösteriyor:
+
+1. `wp-config.php` dosyasında debug modu etkin olmalı:
+```php
+define('WP_DEBUG', true);
+define('WP_DEBUG_LOG', true);
+```
+
+2. Update işlemini tekrar deneyin
+
+3. `wp-content/debug.log` dosyasını açın ve şu satırları arayın:
+```
+Update Controller: Step 0 - Downloading plugin from [URL]
+Update Controller: Step 0 SUCCESS - Plugin downloaded to [path]
+Update Controller: Step 1 - Starting authentication to [site URL]
+Update Controller: Step 1 SUCCESS - Authentication successful
+Update Controller: Step 2 - Starting file upload
+Update Controller: Step 2 SUCCESS - File uploaded
+Update Controller: Step 3 - Deactivating plugin
+Update Controller: Step 4 - Installing plugin
+Update Controller: Step 4 SUCCESS - Plugin installed
+Update Controller: Step 5 - Reactivating plugin
+Update Controller: All steps completed successfully
+```
+
+4. Hangi adımda "FAILED" görüyorsanız, o adımla ilgili çözüme bakın:
+
+**Step 0 FAILED (Download):**
+- Update source URL'i doğru mu?
+- GitHub URL'si doğru formatta mı?
+- İnternet bağlantınız var mı?
+
+**Step 1 FAILED (Authentication):**
+- Application Password doğru mu?
+- Kullanıcı adı doğru mu?
+- Uzak sitede REST API etkin mi?
+
+**Step 2 FAILED (Upload):**
+- Companion plugin aktif mi?
+- Kullanıcının upload_files yetkisi var mı?
+- Dosya boyutu limiti aşıldı mı?
+
+**Step 4 FAILED (Installation):**
+- Companion plugin güncel mi?
+- Hedef dizin yazılabilir mi?
+- PHP execution time limit yeterli mi?
+
+**English:**
+
+With the newly updated code, debug logs now show which step failed:
+
+1. Debug mode must be enabled in `wp-config.php`:
+```php
+define('WP_DEBUG', true);
+define('WP_DEBUG_LOG', true);
+```
+
+2. Try the update again
+
+3. Open `wp-content/debug.log` and look for these lines:
+```
+Update Controller: Step 0 - Downloading plugin from [URL]
+Update Controller: Step 0 SUCCESS - Plugin downloaded to [path]
+Update Controller: Step 1 - Starting authentication to [site URL]
+Update Controller: Step 1 SUCCESS - Authentication successful
+Update Controller: Step 2 - Starting file upload
+Update Controller: Step 2 SUCCESS - File uploaded
+Update Controller: Step 3 - Deactivating plugin
+Update Controller: Step 4 - Installing plugin
+Update Controller: Step 4 SUCCESS - Plugin installed
+Update Controller: Step 5 - Reactivating plugin
+Update Controller: All steps completed successfully
+```
+
+4. If you see "FAILED" at any step, see the solution for that step:
+
+**Step 0 FAILED (Download):**
+- Is the update source URL correct?
+- Is the GitHub URL in correct format?
+- Do you have internet connection?
+
+**Step 1 FAILED (Authentication):**
+- Is the Application Password correct?
+- Is the username correct?
+- Is REST API enabled on remote site?
+
+**Step 2 FAILED (Upload):**
+- Is companion plugin active?
+- Does user have upload_files capability?
+- Is file size limit exceeded?
+
+**Step 4 FAILED (Installation):**
+- Is companion plugin up to date?
+- Is target directory writable?
+- Is PHP execution time limit sufficient?
+
+---
+
+## Yaygın Hatalar ve Çözümleri / Common Errors and Solutions
+
+### "Access forbidden (403)"
+**Neden / Cause:** Application Passwords etkin değil veya yanlış şifre
+**Çözüm / Solution:** Yukarıdaki Adım 2'yi takip edin
+
+### "Companion plugin test failed (HTTP 404)"
+**Neden / Cause:** Companion plugin yüklü değil
+**Çözüm / Solution:** Yukarıdaki Adım 1'i takip edin
+
+### "Invalid credentials (401)"
+**Neden / Cause:** Kullanıcı adı veya Application Password yanlış
+**Çözüm / Solution:** Kimlik bilgilerini kontrol edin, Application Password'ü yeniden oluşturun
+
+### "Upload failed: Failed to upload plugin file: rest_forbidden"
+**Neden / Cause:** Kullanıcının dosya yükleme yetkisi yok
+**Çözüm / Solution:** 
+- Uzak sitede kullanıcının "Administrator" rolü olmalı
+- Veya "upload_files" capability'si olmalı
+
+---
+
+## Hızlı Kontrol Listesi / Quick Checklist
+
+- [ ] Uzak sitede Companion plugin yüklü ve aktif mi?
+- [ ] Application Password oluşturuldu mu ve doğru kopyalandı mı?
+- [ ] Site URL'i doğru mu? (https:// ile başlıyor mu?)
+- [ ] Test butonu başarılı sonuç veriyor mu?
+- [ ] Debug log'ları hangi adımda hata olduğunu gösteriyor?
+- [ ] Uzak sitede kullanıcı Administrator rolünde mi?
+- [ ] WordPress 5.6+ sürümü kullanılıyor mu?
+
+---
+
+## Hala Çalışmıyor mu? / Still Not Working?
+
+**Türkçe:**
+
+1. **Debug log'ları paylaşın**: `wp-content/debug.log` dosyasındaki update ile ilgili tüm satırları kopyalayın
+2. **Test sonucunu paylaşın**: Test butonuna tıkladığınızda çıkan mesajın ekran görüntüsünü alın
+3. **Site bilgilerini kontrol edin**: 
+   - Uzak site WordPress versiyonu: ?
+   - Companion plugin versiyonu: ?
+   - PHP versiyonu: ?
+
+**English:**
+
+1. **Share debug logs**: Copy all update-related lines from `wp-content/debug.log`
+2. **Share test result**: Take a screenshot of the message when clicking Test button
+3. **Check site info**:
+   - Remote site WordPress version: ?
+   - Companion plugin version: ?
+   - PHP version: ?
+
+---
+
+## Önemli Notlar / Important Notes
+
+**Türkçe:**
+- Companion plugin MUTLAKA uzak sitede yüklü olmalıdır (güncellenmesini istediğiniz site)
+- Application Password normal WordPress şifresinden FARKLIDIR
+- Test butonu her şeyin doğru çalıştığını kontrol etmek için kullanılmalıdır
+- Debug log'ları artık hangi adımda sorun olduğunu gösteriyor
+
+**English:**
+- Companion plugin MUST be installed on the remote site (the site you want to update)
+- Application Password is DIFFERENT from regular WordPress password
+- Test button should be used to verify everything works correctly
+- Debug logs now show which step is failing

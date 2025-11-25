@@ -18,21 +18,44 @@ class UC_Updater {
         
         if (!current_user_can('manage_options')) {
             wp_send_json_error(array('message' => __('Insufficient permissions', 'update-controller')));
+            exit;
         }
         
         $plugin_id = isset($_POST['plugin_id']) ? intval($_POST['plugin_id']) : 0;
         
         if (empty($plugin_id)) {
             wp_send_json_error(array('message' => __('Invalid plugin ID', 'update-controller')));
+            exit;
+        }
+        
+        // Increase time limit for long-running updates
+        $timeout = apply_filters('uc_update_timeout', 300); // 5 minutes default, filterable
+        set_time_limit($timeout);
+        
+        // Log the update attempt
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log(sprintf('Update Controller: Manual update requested for plugin ID: %d', absint($plugin_id)));
         }
         
         $result = self::update_plugin($plugin_id);
+        
+        // Log the result with error message for debugging
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            if ($result['success']) {
+                error_log('Update Controller: Manual update completed with status: success');
+            } else {
+                // Log error message without sensitive data
+                $error_msg = isset($result['message']) ? $result['message'] : 'Unknown error';
+                error_log('Update Controller: Manual update failed - ' . sanitize_text_field($error_msg));
+            }
+        }
         
         if ($result['success']) {
             wp_send_json_success($result);
         } else {
             wp_send_json_error($result);
         }
+        exit;
     }
     
     /**
@@ -76,13 +99,24 @@ class UC_Updater {
         }
         
         // Download plugin file from source
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Step 0 - Downloading plugin from ' . $plugin->update_source);
+        }
+        
         $plugin_file = self::download_plugin($plugin->update_source, $plugin->source_type);
         
         if (is_wp_error($plugin_file)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Update Controller: Step 0 FAILED - Download error: ' . $plugin_file->get_error_message());
+            }
             return array(
                 'success' => false,
                 'message' => $plugin_file->get_error_message()
             );
+        }
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Step 0 SUCCESS - Plugin downloaded to ' . $plugin_file);
         }
         
         // Upload and install plugin on remote site
@@ -110,10 +144,53 @@ class UC_Updater {
             $source_url = self::convert_github_url($source_url);
         }
         
+        // Handle Google Drive URLs
+        if (strpos($source_url, 'drive.google.com') !== false) {
+            $source_url = self::convert_google_drive_url($source_url);
+            if (is_wp_error($source_url)) {
+                return $source_url;
+            }
+        }
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Downloading from URL: ' . $source_url);
+        }
+        
         $temp_file = download_url($source_url);
         
         if (is_wp_error($temp_file)) {
             return $temp_file;
+        }
+        
+        // Validate that we downloaded a ZIP file
+        $file_type = wp_check_filetype($temp_file);
+        $file_size = filesize($temp_file);
+        
+        // Check if file is actually a ZIP (not HTML or other format)
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime_type = finfo_file($finfo, $temp_file);
+        finfo_close($finfo);
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Downloaded file mime type: ' . $mime_type . ', size: ' . $file_size . ' bytes');
+        }
+        
+        // Validate it's a ZIP file
+        if ($mime_type !== 'application/zip' && $file_type['ext'] !== 'zip') {
+            @unlink($temp_file);
+            
+            // Check if it's an HTML file (common with Google Drive sharing links)
+            if (strpos($mime_type, 'text/html') !== false || $file_size < 1000) {
+                return new WP_Error(
+                    'invalid_source',
+                    __('Download failed: Source URL returned an HTML page instead of a ZIP file. If using Google Drive, make sure to use a direct download link. See documentation for proper URL formats.', 'update-controller')
+                );
+            }
+            
+            return new WP_Error(
+                'invalid_file_type',
+                sprintf(__('Download failed: Expected ZIP file but got %s. Please check the source URL.', 'update-controller'), $mime_type)
+            );
         }
         
         return $temp_file;
@@ -142,49 +219,117 @@ class UC_Updater {
     }
     
     /**
+     * Convert Google Drive sharing URL to direct download URL
+     */
+    private static function convert_google_drive_url($url) {
+        // Google Drive sharing links look like:
+        // https://drive.google.com/file/d/FILE_ID/view?usp=sharing
+        // Direct download should be:
+        // https://drive.google.com/uc?export=download&id=FILE_ID
+        
+        if (preg_match('#drive\.google\.com/file/d/([^/]+)#', $url, $matches)) {
+            $file_id = $matches[1];
+            return 'https://drive.google.com/uc?export=download&id=' . $file_id;
+        }
+        
+        // If already a direct download link, return as is
+        if (strpos($url, 'drive.google.com/uc?') !== false) {
+            return $url;
+        }
+        
+        // If we can't parse it, return an error
+        return new WP_Error(
+            'invalid_google_drive_url',
+            __('Invalid Google Drive URL format. Please use: https://drive.google.com/file/d/FILE_ID/view or get a direct download link.', 'update-controller')
+        );
+    }
+    
+    /**
      * Install plugin on remote WordPress site
      */
     private static function install_remote_plugin($site, $plugin, $plugin_file) {
         // Decrypt password
         $password = UC_Encryption::decrypt($site->password);
         
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Step 1 - Starting authentication to ' . $site->site_url);
+        }
+        
         // Authenticate with WordPress site
         $auth_result = self::authenticate_site($site->site_url, $site->username, $password);
         
         if (is_wp_error($auth_result)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Update Controller: Step 1 FAILED - Authentication error: ' . $auth_result->get_error_message());
+            }
             return array(
                 'success' => false,
                 'message' => __('Authentication failed: ', 'update-controller') . $auth_result->get_error_message()
             );
         }
         
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Step 1 SUCCESS - Authentication successful');
+        }
+        
         $cookie = $auth_result;
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Step 2 - Starting file upload');
+        }
         
         // Upload plugin file
         $upload_result = self::upload_plugin_file($site->site_url, $plugin_file, $cookie);
         
         if (is_wp_error($upload_result)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Update Controller: Step 2 FAILED - Upload error: ' . $upload_result->get_error_message());
+            }
             return array(
                 'success' => false,
                 'message' => __('Upload failed: ', 'update-controller') . $upload_result->get_error_message()
             );
         }
         
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Step 2 SUCCESS - File uploaded');
+        }
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Step 3 - Deactivating plugin');
+        }
+        
         // Deactivate plugin before update
         self::toggle_plugin($site->site_url, $plugin->plugin_slug, 'deactivate', $cookie);
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Step 4 - Installing plugin');
+        }
         
         // Install/update plugin
         $install_result = self::install_plugin_from_upload($site->site_url, $upload_result, $cookie);
         
         if (is_wp_error($install_result)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Update Controller: Step 4 FAILED - Installation error: ' . $install_result->get_error_message());
+            }
             return array(
                 'success' => false,
                 'message' => __('Installation failed: ', 'update-controller') . $install_result->get_error_message()
             );
         }
         
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Step 4 SUCCESS - Plugin installed');
+            error_log('Update Controller: Step 5 - Reactivating plugin');
+        }
+        
         // Reactivate plugin
         self::toggle_plugin($site->site_url, $plugin->plugin_slug, 'activate', $cookie);
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: All steps completed successfully');
+        }
         
         return array(
             'success' => true,
@@ -295,6 +440,9 @@ class UC_Updater {
             
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log('Update Controller: Companion upload response code: ' . $code);
+                if ($code !== 200) {
+                    error_log('Update Controller: Companion upload failed - ' . substr($body_text, 0, 200));
+                }
             }
             
             if ($code === 200 && isset($body['file_id'])) {
@@ -302,6 +450,10 @@ class UC_Updater {
                     error_log('Update Controller: Upload via companion successful, file ID: ' . $body['file_id']);
                 }
                 return array('id' => $body['file_id'], 'method' => 'companion');
+            }
+        } else {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Update Controller: Companion upload request error - ' . $response->get_error_message());
             }
         }
         
@@ -338,7 +490,10 @@ class UC_Updater {
         if ($code !== 201 && $code !== 200) {
             $error_msg = isset($body['message']) ? $body['message'] : 'HTTP ' . $code;
             if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('Update Controller: Upload failed with code ' . $code . ': ' . $error_msg);
+                error_log('Update Controller: Media library upload failed with code ' . $code . ': ' . $error_msg);
+                if ($code === 403) {
+                    error_log('Update Controller: 403 Forbidden - Check user has upload_files capability');
+                }
             }
             return new WP_Error('upload_failed', __('Failed to upload plugin file: ', 'update-controller') . $error_msg);
         }
