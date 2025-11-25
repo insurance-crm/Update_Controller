@@ -227,9 +227,6 @@ class UC_Companion {
         if ($plugin_main_file && file_exists(WP_PLUGIN_DIR . '/' . $plugin_main_file)) {
             $is_update = true;
             
-            // Backup: Create a backup of old plugin before removing
-            $backup_dir = get_temp_dir() . 'uc-backup-' . $plugin_folder . '-' . time();
-            
             // Remove old plugin directory
             if (file_exists($plugin_dir)) {
                 $delete_success = false;
@@ -263,7 +260,7 @@ class UC_Companion {
         $install_error = '';
         
         // Method 1: Try WP_Filesystem copy_dir (most reliable)
-        if ($wp_filesystem && method_exists($wp_filesystem, 'dirlist')) {
+        if ($wp_filesystem) {
             $install_result = copy_dir($source_dir, $plugin_dir);
             if (is_wp_error($install_result)) {
                 $install_error = $install_result->get_error_message();
@@ -312,7 +309,13 @@ class UC_Companion {
             
             // Check directory permissions
             $perms = substr(sprintf('%o', fileperms(WP_PLUGIN_DIR)), -4);
-            $owner = function_exists('posix_getpwuid') ? posix_getpwuid(fileowner(WP_PLUGIN_DIR))['name'] : fileowner(WP_PLUGIN_DIR);
+            $owner = fileowner(WP_PLUGIN_DIR);
+            if (function_exists('posix_getpwuid')) {
+                $owner_info = posix_getpwuid($owner);
+                if ($owner_info && isset($owner_info['name'])) {
+                    $owner = $owner_info['name'];
+                }
+            }
             $error_msg .= sprintf(__('Plugin dir permissions: %s, owner: %s.', 'update-controller-companion'), $perms, $owner);
             
             return new WP_Error('install_failed', $error_msg, array('status' => 500));
@@ -345,21 +348,22 @@ class UC_Companion {
      * Recursively copy directory
      */
     private static function recursive_copy($source, $dest) {
-        // Create destination directory
+        // Create destination directory with same permissions as plugins dir
         if (!file_exists($dest)) {
-            if (!@mkdir($dest, 0755, true)) {
+            $parent_perms = fileperms(WP_PLUGIN_DIR) & 0777;
+            if (!@mkdir($dest, $parent_perms, true)) {
                 return false;
             }
         }
         
-        // Get directory contents
-        $dir = @opendir($source);
-        if (!$dir) {
+        // Get directory contents using scandir (more efficient)
+        $files = @scandir($source);
+        if ($files === false) {
             return false;
         }
         
         $success = true;
-        while (($file = readdir($dir)) !== false) {
+        foreach ($files as $file) {
             if ($file === '.' || $file === '..') {
                 continue;
             }
@@ -378,7 +382,6 @@ class UC_Companion {
             }
         }
         
-        closedir($dir);
         return $success;
     }
     
