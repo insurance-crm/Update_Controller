@@ -151,16 +151,16 @@ jQuery(document).ready(function($) {
     // Plugins Management
     var currentPluginId = null;
     
-    // Toggle source method (URL vs Upload)
+    // Toggle source method (URL vs Package)
     function toggleSourceMethod() {
         var method = $('#uc-source-method').val();
-        if (method === 'upload') {
+        if (method === 'package') {
             $('#uc-source-url-fields').hide();
-            $('#uc-source-upload-fields').show();
+            $('#uc-source-package-fields').show();
             $('#uc-update-source').prop('required', false);
         } else {
             $('#uc-source-url-fields').show();
-            $('#uc-source-upload-fields').hide();
+            $('#uc-source-package-fields').hide();
             $('#uc-update-source').prop('required', true);
         }
     }
@@ -169,9 +169,13 @@ jQuery(document).ready(function($) {
         toggleSourceMethod();
     });
     
-    // Change file button
-    $(document).on('click', '#uc-change-file', function() {
-        $('#uc-plugin-file').click();
+    // When package is selected, update hidden URL field
+    $(document).on('change', '#uc-package-select', function() {
+        var packageUrl = $(this).val();
+        if (packageUrl) {
+            $('#uc-update-source').val(packageUrl);
+            $('#uc-source-type').val('local');
+        }
     });
     
     // Open add plugin modal
@@ -181,8 +185,7 @@ jQuery(document).ready(function($) {
         $('#uc-plugin-form')[0].reset();
         $('#uc-plugin-id').val('');
         $('#uc-source-method').val('url');
-        toggleSourceMethod(); // Initialize visibility
-        $('#uc-current-file-info').hide();
+        toggleSourceMethod();
         $('#uc-auto-update').prop('checked', true);
         $('#uc-plugin-modal').fadeIn();
     });
@@ -207,19 +210,17 @@ jQuery(document).ready(function($) {
         $('#uc-plugin-name').val(pluginName);
         $('#uc-plugin-slug').val(pluginSlug);
         
-        // Check if it's a file upload (local:// prefix) or URL
-        if (updateSource && updateSource.startsWith('local://')) {
-            $('#uc-source-method').val('upload');
-            toggleSourceMethod(); // Update visibility
-            var fileName = updateSource.replace('local://', '');
-            $('#uc-current-file-name').text(fileName);
-            $('#uc-current-file-info').show();
+        // Check if source is a local package (check if URL matches any package)
+        var $packageOption = $('#uc-package-select option[value="' + updateSource + '"]');
+        if ($packageOption.length > 0 || sourceType === 'local') {
+            $('#uc-source-method').val('package');
+            $('#uc-package-select').val(updateSource);
         } else {
             $('#uc-source-method').val('url');
-            toggleSourceMethod(); // Update visibility
             $('#uc-update-source').val(updateSource);
             $('#uc-source-type').val(sourceType);
         }
+        toggleSourceMethod();
         
         $('#uc-auto-update').prop('checked', autoUpdate);
         $('#uc-plugin-modal').fadeIn();
@@ -263,76 +264,57 @@ jQuery(document).ready(function($) {
         e.preventDefault();
         
         var sourceMethod = $('#uc-source-method').val();
-        var formData;
-        var ajaxSettings;
+        var updateSource, sourceType;
         
-        if (sourceMethod === 'upload') {
-            // File upload method
-            var fileInput = $('#uc-plugin-file')[0];
-            if (!currentPluginId && (!fileInput.files || !fileInput.files[0])) {
-                showNotice('Please select a ZIP file to upload', 'error');
+        if (sourceMethod === 'package') {
+            updateSource = $('#uc-package-select').val();
+            sourceType = 'local';
+            
+            if (!updateSource) {
+                showNotice('Please select an update package', 'error');
                 return;
             }
-            
-            formData = new FormData();
-            formData.append('action', currentPluginId ? 'uc_update_plugin' : 'uc_add_plugin');
-            formData.append('nonce', ucAdmin.nonce);
-            formData.append('plugin_id', $('#uc-plugin-id').val());
-            formData.append('site_id', $('#uc-plugin-site').val());
-            formData.append('plugin_name', $('#uc-plugin-name').val());
-            formData.append('plugin_slug', $('#uc-plugin-slug').val());
-            formData.append('source_type', 'upload');
-            formData.append('auto_update', $('#uc-auto-update').is(':checked') ? 1 : 0);
-            
-            if (fileInput.files && fileInput.files[0]) {
-                formData.append('plugin_file', fileInput.files[0]);
-            }
-            
-            ajaxSettings = {
-                url: ucAdmin.ajaxUrl,
-                type: 'POST',
-                data: formData,
-                processData: false,
-                contentType: false
-            };
         } else {
-            // URL method
-            formData = {
-                action: currentPluginId ? 'uc_update_plugin' : 'uc_add_plugin',
-                nonce: ucAdmin.nonce,
-                plugin_id: $('#uc-plugin-id').val(),
-                site_id: $('#uc-plugin-site').val(),
-                plugin_name: $('#uc-plugin-name').val(),
-                plugin_slug: $('#uc-plugin-slug').val(),
-                update_source: $('#uc-update-source').val(),
-                source_type: $('#uc-source-type').val(),
-                auto_update: $('#uc-auto-update').is(':checked') ? 1 : 0
-            };
+            updateSource = $('#uc-update-source').val();
+            sourceType = $('#uc-source-type').val();
             
-            ajaxSettings = {
-                url: ucAdmin.ajaxUrl,
-                type: 'POST',
-                data: formData
-            };
+            if (!updateSource) {
+                showNotice('Please enter an update source URL', 'error');
+                return;
+            }
         }
         
-        ajaxSettings.success = function(response) {
-            if (response.success) {
-                showNotice(response.data.message, 'success');
-                $('#uc-plugin-modal').fadeOut();
-                setTimeout(function() {
-                    location.reload();
-                }, 1000);
-            } else {
-                showNotice(response.data.message, 'error');
+        var formData = {
+            action: currentPluginId ? 'uc_update_plugin' : 'uc_add_plugin',
+            nonce: ucAdmin.nonce,
+            plugin_id: $('#uc-plugin-id').val(),
+            site_id: $('#uc-plugin-site').val(),
+            plugin_name: $('#uc-plugin-name').val(),
+            plugin_slug: $('#uc-plugin-slug').val(),
+            update_source: updateSource,
+            source_type: sourceType,
+            auto_update: $('#uc-auto-update').is(':checked') ? 1 : 0
+        };
+        
+        $.ajax({
+            url: ucAdmin.ajaxUrl,
+            type: 'POST',
+            data: formData,
+            success: function(response) {
+                if (response.success) {
+                    showNotice(response.data.message, 'success');
+                    $('#uc-plugin-modal').fadeOut();
+                    setTimeout(function() {
+                        location.reload();
+                    }, 1000);
+                } else {
+                    showNotice(response.data.message, 'error');
+                }
+            },
+            error: function() {
+                showNotice('An error occurred', 'error');
             }
-        };
-        
-        ajaxSettings.error = function() {
-            showNotice('An error occurred', 'error');
-        };
-        
-        $.ajax(ajaxSettings);
+        });
     });
     
     // Run update
@@ -405,4 +387,116 @@ jQuery(document).ready(function($) {
             });
         }, 3000);
     }
+    
+    // ============================================
+    // Updates Management
+    // ============================================
+    
+    // Open add update package modal
+    $('#uc-add-update-btn').on('click', function() {
+        $('#uc-update-package-form')[0].reset();
+        $('#uc-upload-progress').hide();
+        $('#uc-upload-btn').prop('disabled', false);
+        $('#uc-update-package-modal').fadeIn();
+    });
+    
+    // Submit update package form
+    $('#uc-update-package-form').on('submit', function(e) {
+        e.preventDefault();
+        
+        var fileInput = $('#uc-update-file')[0];
+        if (!fileInput.files || !fileInput.files[0]) {
+            showNotice('Please select a ZIP file to upload', 'error');
+            return;
+        }
+        
+        var formData = new FormData();
+        formData.append('action', 'uc_add_update_package');
+        formData.append('nonce', ucAdmin.nonce);
+        formData.append('package_name', $('#uc-package-name').val());
+        formData.append('version', $('#uc-package-version').val());
+        formData.append('update_file', fileInput.files[0]);
+        
+        $('#uc-upload-progress').show();
+        $('#uc-upload-btn').prop('disabled', true);
+        
+        $.ajax({
+            url: ucAdmin.ajaxUrl,
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                if (response.success) {
+                    showNotice(response.data.message, 'success');
+                    $('#uc-update-package-modal').fadeOut();
+                    setTimeout(function() {
+                        location.reload();
+                    }, 1000);
+                } else {
+                    showNotice(response.data.message, 'error');
+                    $('#uc-upload-progress').hide();
+                    $('#uc-upload-btn').prop('disabled', false);
+                }
+            },
+            error: function() {
+                showNotice('An error occurred during upload', 'error');
+                $('#uc-upload-progress').hide();
+                $('#uc-upload-btn').prop('disabled', false);
+            }
+        });
+    });
+    
+    // Delete update package
+    $(document).on('click', '.uc-delete-update', function() {
+        if (!confirm(ucAdmin.strings.confirmDelete)) {
+            return;
+        }
+        
+        var updateId = $(this).data('id');
+        var $row = $(this).closest('tr');
+        
+        $.ajax({
+            url: ucAdmin.ajaxUrl,
+            type: 'POST',
+            data: {
+                action: 'uc_delete_update_package',
+                nonce: ucAdmin.nonce,
+                update_id: updateId
+            },
+            success: function(response) {
+                if (response.success) {
+                    $row.fadeOut(function() {
+                        $(this).remove();
+                    });
+                    showNotice(response.data.message, 'success');
+                } else {
+                    showNotice(response.data.message, 'error');
+                }
+            },
+            error: function() {
+                showNotice('An error occurred', 'error');
+            }
+        });
+    });
+    
+    // Copy URL button
+    $(document).on('click', '.uc-copy-btn', function() {
+        var url = $(this).data('url');
+        var $button = $(this);
+        
+        // Create temporary input
+        var $temp = $('<input>');
+        $('body').append($temp);
+        $temp.val(url).select();
+        document.execCommand('copy');
+        $temp.remove();
+        
+        // Update button text temporarily
+        var originalText = $button.text();
+        $button.text('Copied!');
+        setTimeout(function() {
+            $button.text(originalText);
+        }, 1500);
+    });
 });

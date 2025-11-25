@@ -51,23 +51,40 @@ class UC_Database {
             KEY site_id (site_id)
         ) $charset_collate;";
         
+        // Updates (packages) table
+        $updates_table = $wpdb->prefix . 'uc_updates';
+        $updates_sql = "CREATE TABLE $updates_table (
+            id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            package_name varchar(255) NOT NULL,
+            file_name varchar(255) NOT NULL,
+            file_path varchar(500) NOT NULL,
+            file_url varchar(500) NOT NULL,
+            file_size bigint(20) DEFAULT 0,
+            version varchar(50) DEFAULT '',
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY  (id)
+        ) $charset_collate;";
+        
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         
         $result_sites = dbDelta($sites_sql);
         $result_plugins = dbDelta($plugins_sql);
+        $result_updates = dbDelta($updates_sql);
         
         // Log results for debugging
         if (defined('WP_DEBUG') && WP_DEBUG) {
             error_log('Update Controller: Sites table creation result - ' . print_r($result_sites, true));
             error_log('Update Controller: Plugins table creation result - ' . print_r($result_plugins, true));
+            error_log('Update Controller: Updates table creation result - ' . print_r($result_updates, true));
         }
         
         // Verify tables were created
         $sites_exists = $wpdb->get_var("SHOW TABLES LIKE '$sites_table'") == $sites_table;
         $plugins_exists = $wpdb->get_var("SHOW TABLES LIKE '$plugins_table'") == $plugins_table;
+        $updates_exists = $wpdb->get_var("SHOW TABLES LIKE '$updates_table'") == $updates_table;
         
-        if (!$sites_exists || !$plugins_exists) {
-            error_log('Update Controller: Table creation failed. Sites exists: ' . ($sites_exists ? 'yes' : 'no') . ', Plugins exists: ' . ($plugins_exists ? 'yes' : 'no'));
+        if (!$sites_exists || !$plugins_exists || !$updates_exists) {
+            error_log('Update Controller: Table creation failed. Sites exists: ' . ($sites_exists ? 'yes' : 'no') . ', Plugins exists: ' . ($plugins_exists ? 'yes' : 'no') . ', Updates exists: ' . ($updates_exists ? 'yes' : 'no'));
         }
     }
     
@@ -282,5 +299,88 @@ class UC_Database {
             array('%s'),
             array('%d')
         );
+    }
+    
+    /**
+     * Get all update packages
+     */
+    public static function get_updates() {
+        global $wpdb;
+        $controller = Update_Controller::get_instance();
+        $table = $controller->get_updates_table();
+        
+        return $wpdb->get_results("SELECT * FROM $table ORDER BY created_at DESC");
+    }
+    
+    /**
+     * Get update package by ID
+     */
+    public static function get_update($update_id) {
+        global $wpdb;
+        $controller = Update_Controller::get_instance();
+        $table = $controller->get_updates_table();
+        
+        return $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id = %d", $update_id));
+    }
+    
+    /**
+     * Add new update package
+     */
+    public static function add_update($package_name, $file_name, $file_path, $file_url, $file_size = 0, $version = '') {
+        global $wpdb;
+        $controller = Update_Controller::get_instance();
+        $table = $controller->get_updates_table();
+        
+        $result = $wpdb->insert(
+            $table,
+            array(
+                'package_name' => sanitize_text_field($package_name),
+                'file_name' => sanitize_file_name($file_name),
+                'file_path' => sanitize_text_field($file_path),
+                'file_url' => esc_url_raw($file_url),
+                'file_size' => intval($file_size),
+                'version' => sanitize_text_field($version)
+            ),
+            array('%s', '%s', '%s', '%s', '%d', '%s')
+        );
+        
+        return $result !== false ? $wpdb->insert_id : false;
+    }
+    
+    /**
+     * Update existing update package
+     */
+    public static function update_update($update_id, $package_name, $version = '') {
+        global $wpdb;
+        $controller = Update_Controller::get_instance();
+        $table = $controller->get_updates_table();
+        
+        return $wpdb->update(
+            $table,
+            array(
+                'package_name' => sanitize_text_field($package_name),
+                'version' => sanitize_text_field($version)
+            ),
+            array('id' => $update_id),
+            array('%s', '%s'),
+            array('%d')
+        );
+    }
+    
+    /**
+     * Delete update package
+     */
+    public static function delete_update($update_id) {
+        global $wpdb;
+        $controller = Update_Controller::get_instance();
+        $table = $controller->get_updates_table();
+        
+        // Get file path to delete
+        $update = self::get_update($update_id);
+        if ($update && !empty($update->file_path) && file_exists($update->file_path)) {
+            @unlink($update->file_path);
+        }
+        
+        return $wpdb->delete($table, array('id' => $update_id), array('%d'));
     }
 }

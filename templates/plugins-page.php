@@ -92,10 +92,10 @@
             </p>
             
             <p>
-                <label for="uc-update-source"><?php echo esc_html__('Update Source', 'update-controller'); ?></label>
+                <label for="uc-source-method"><?php echo esc_html__('Update Source', 'update-controller'); ?></label>
                 <select id="uc-source-method" class="regular-text">
-                    <option value="url"><?php echo esc_html__('URL (Link)', 'update-controller'); ?></option>
-                    <option value="upload"><?php echo esc_html__('Upload File', 'update-controller'); ?></option>
+                    <option value="url"><?php echo esc_html__('URL (External Link)', 'update-controller'); ?></option>
+                    <option value="package"><?php echo esc_html__('Local Package (Uploaded)', 'update-controller'); ?></option>
                 </select>
             </p>
             
@@ -103,7 +103,7 @@
                 <p>
                     <label for="uc-update-source"><?php echo esc_html__('Update Source URL', 'update-controller'); ?></label>
                     <input type="url" id="uc-update-source" name="update_source" class="regular-text" placeholder="https://example.com/plugin.zip">
-                    <span class="description"><?php echo esc_html__('Direct download URL, GitHub repository URL, or Google Drive link', 'update-controller'); ?></span>
+                    <span class="description"><?php echo esc_html__('Direct download URL or GitHub repository URL', 'update-controller'); ?></span>
                 </p>
                 
                 <p>
@@ -115,16 +115,27 @@
                 </p>
             </div>
             
-            <div id="uc-source-upload-fields" style="display:none;">
+            <div id="uc-source-package-fields" style="display:none;">
                 <p>
-                    <label for="uc-plugin-file"><?php echo esc_html__('Plugin ZIP File', 'update-controller'); ?></label>
-                    <input type="file" id="uc-plugin-file" name="plugin_file" accept=".zip">
-                    <span class="description"><?php echo esc_html__('Upload plugin ZIP file (max 50MB)', 'update-controller'); ?></span>
-                </p>
-                <p id="uc-current-file-info" style="display:none;">
-                    <strong><?php echo esc_html__('Current file:', 'update-controller'); ?></strong>
-                    <span id="uc-current-file-name"></span>
-                    <button type="button" class="button button-small" id="uc-change-file"><?php echo esc_html__('Change File', 'update-controller'); ?></button>
+                    <label for="uc-package-select"><?php echo esc_html__('Select Package', 'update-controller'); ?></label>
+                    <select id="uc-package-select" class="regular-text">
+                        <option value=""><?php echo esc_html__('-- Select a package --', 'update-controller'); ?></option>
+                        <?php if (!empty($updates)) : ?>
+                            <?php foreach ($updates as $update) : ?>
+                                <option value="<?php echo esc_attr($update->file_url); ?>" data-name="<?php echo esc_attr($update->package_name); ?>">
+                                    <?php echo esc_html($update->package_name); ?>
+                                    <?php if ($update->version) : ?>
+                                        (v<?php echo esc_html($update->version); ?>)
+                                    <?php endif; ?>
+                                    - <?php echo esc_html(size_format($update->file_size)); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </select>
+                    <span class="description">
+                        <?php echo esc_html__('Select from packages uploaded in the Updates section.', 'update-controller'); ?>
+                        <a href="<?php echo esc_url(admin_url('admin.php?page=update-controller-updates')); ?>"><?php echo esc_html__('Upload new package', 'update-controller'); ?></a>
+                    </span>
                 </p>
             </div>
             

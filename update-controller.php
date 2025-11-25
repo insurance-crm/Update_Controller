@@ -38,6 +38,7 @@ class Update_Controller {
      */
     private $sites_table;
     private $plugins_table;
+    private $updates_table;
     
     /**
      * Get singleton instance
@@ -56,6 +57,7 @@ class Update_Controller {
         global $wpdb;
         $this->sites_table = $wpdb->prefix . 'uc_sites';
         $this->plugins_table = $wpdb->prefix . 'uc_plugins';
+        $this->updates_table = $wpdb->prefix . 'uc_updates';
         
         // Include required files
         $this->include_files();
@@ -93,6 +95,11 @@ class Update_Controller {
         add_action('wp_ajax_uc_update_plugin', array('UC_Admin', 'ajax_update_plugin'));
         add_action('wp_ajax_uc_delete_plugin', array('UC_Admin', 'ajax_delete_plugin'));
         add_action('wp_ajax_uc_run_update', array('UC_Updater', 'ajax_run_update'));
+        
+        // Update packages AJAX handlers
+        add_action('wp_ajax_uc_add_update_package', array('UC_Admin', 'ajax_add_update_package'));
+        add_action('wp_ajax_uc_delete_update_package', array('UC_Admin', 'ajax_delete_update_package'));
+        add_action('wp_ajax_uc_get_update_packages', array('UC_Admin', 'ajax_get_update_packages'));
         
         // Scheduled update hook
         add_action('uc_scheduled_update', array('UC_Updater', 'run_scheduled_update'));
@@ -136,6 +143,13 @@ class Update_Controller {
      */
     public function get_plugins_table() {
         return $this->plugins_table;
+    }
+    
+    /**
+     * Get updates table name
+     */
+    public function get_updates_table() {
+        return $this->updates_table;
     }
 }
 
