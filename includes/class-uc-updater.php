@@ -156,7 +156,9 @@ class UC_Updater {
             error_log('Update Controller: Downloading from URL: ' . $source_url);
         }
         
-        $temp_file = download_url($source_url);
+        // Use wp_remote_get with proper headers to avoid "Forbidden" errors
+        // Some servers block requests without User-Agent or other headers
+        $temp_file = self::download_file_with_headers($source_url);
         
         if (is_wp_error($temp_file)) {
             return $temp_file;
@@ -191,6 +193,113 @@ class UC_Updater {
                 'invalid_file_type',
                 sprintf(__('Download failed: Expected ZIP file but got %s. Please check the source URL.', 'update-controller'), $mime_type)
             );
+        }
+        
+        return $temp_file;
+    }
+    
+    /**
+     * Download file with proper HTTP headers
+     * 
+     * Some servers block requests without proper User-Agent or Referer headers.
+     * This method uses wp_remote_get with customized headers to avoid "Forbidden" errors.
+     * 
+     * Common causes of 403 Forbidden:
+     * - Hotlink protection (Referer must match source domain)
+     * - User-Agent filtering (non-browser requests blocked)
+     * - Security plugins (Wordfence, Sucuri, etc.)
+     * - Server mod_security rules
+     * 
+     * @param string $url URL to download
+     * @return string|WP_Error Path to temporary file or error
+     */
+    private static function download_file_with_headers($url) {
+        // Parse URL to get the source domain for Referer header
+        $parsed_url = wp_parse_url($url);
+        $source_domain = isset($parsed_url['scheme']) && isset($parsed_url['host']) 
+            ? $parsed_url['scheme'] . '://' . $parsed_url['host'] 
+            : '';
+        
+        // Prepare headers to mimic a real browser request
+        // Using a common browser User-Agent to avoid being blocked by security plugins
+        $headers = array(
+            'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language' => 'en-US,en;q=0.9',
+            'Accept-Encoding' => 'gzip, deflate, br',
+            'Connection' => 'keep-alive',
+            'Upgrade-Insecure-Requests' => '1',
+            // Use source domain as Referer to bypass hotlink protection
+            'Referer' => $source_domain ? $source_domain . '/' : home_url(),
+            'Sec-Fetch-Dest' => 'document',
+            'Sec-Fetch-Mode' => 'navigate',
+            'Sec-Fetch-Site' => 'cross-site',
+            'Sec-Fetch-User' => '?1',
+        );
+        
+        // Allow filtering of download headers
+        $headers = apply_filters('uc_download_headers', $headers, $url);
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Downloading with browser-like headers from: ' . $url);
+            error_log('Update Controller: Referer set to: ' . $headers['Referer']);
+        }
+        
+        // Make the request
+        $response = wp_remote_get($url, array(
+            'headers' => $headers,
+            'timeout' => apply_filters('uc_download_timeout', 300), // 5 minutes timeout
+            'stream' => true,
+            'filename' => wp_tempnam($url),
+            'sslverify' => apply_filters('uc_download_sslverify', true),
+            'redirection' => 5, // Follow up to 5 redirects
+        ));
+        
+        if (is_wp_error($response)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Update Controller: Download request failed - ' . $response->get_error_message());
+            }
+            return $response;
+        }
+        
+        $response_code = wp_remote_retrieve_response_code($response);
+        $temp_file = $response['filename'];
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Update Controller: Download response code: ' . $response_code);
+        }
+        
+        // Handle non-200 response codes
+        if ($response_code !== 200) {
+            @unlink($temp_file);
+            
+            $error_message = '';
+            switch ($response_code) {
+                case 403:
+                    $error_message = __('Forbidden - The server denied access to the file. Check if the file URL is publicly accessible or requires authentication.', 'update-controller');
+                    break;
+                case 404:
+                    $error_message = __('Not Found - The file does not exist at the specified URL. Please check the URL is correct.', 'update-controller');
+                    break;
+                case 401:
+                    $error_message = __('Unauthorized - The server requires authentication to access this file.', 'update-controller');
+                    break;
+                case 500:
+                case 502:
+                case 503:
+                    $error_message = __('Server Error - The source server encountered an error. Please try again later.', 'update-controller');
+                    break;
+                default:
+                    $error_message = sprintf(__('Download failed with HTTP status code %d', 'update-controller'), $response_code);
+            }
+            
+            return new WP_Error('download_failed', $error_message);
+        }
+        
+        // Verify the file was created
+        if (!file_exists($temp_file) || filesize($temp_file) === 0) {
+            @unlink($temp_file);
+            return new WP_Error('download_failed', __('Downloaded file is empty or was not created', 'update-controller'));
         }
         
         return $temp_file;
