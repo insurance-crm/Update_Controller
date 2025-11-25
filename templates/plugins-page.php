@@ -118,23 +118,32 @@
             <div id="uc-source-package-fields" style="display:none;">
                 <p>
                     <label for="uc-package-select"><?php echo esc_html__('Select Package', 'update-controller'); ?></label>
+                    <?php if (!empty($updates)) : ?>
                     <select id="uc-package-select" class="regular-text">
                         <option value=""><?php echo esc_html__('-- Select a package --', 'update-controller'); ?></option>
-                        <?php if (!empty($updates)) : ?>
-                            <?php foreach ($updates as $update) : ?>
-                                <option value="<?php echo esc_attr($update->file_url); ?>" data-name="<?php echo esc_attr($update->package_name); ?>">
-                                    <?php echo esc_html($update->package_name); ?>
-                                    <?php if ($update->version) : ?>
-                                        (v<?php echo esc_html($update->version); ?>)
-                                    <?php endif; ?>
-                                    - <?php echo esc_html(size_format($update->file_size)); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
+                        <?php foreach ($updates as $update) : ?>
+                            <option value="<?php echo esc_attr($update->file_url); ?>" data-name="<?php echo esc_attr($update->package_name); ?>">
+                                <?php echo esc_html($update->package_name); ?>
+                                <?php if ($update->version) : ?>
+                                    (v<?php echo esc_html($update->version); ?>)
+                                <?php endif; ?>
+                                - <?php echo esc_html(size_format($update->file_size)); ?>
+                            </option>
+                        <?php endforeach; ?>
                     </select>
+                    <?php else : ?>
+                    <select id="uc-package-select" class="regular-text" disabled>
+                        <option value=""><?php echo esc_html__('No packages uploaded yet', 'update-controller'); ?></option>
+                    </select>
+                    <?php endif; ?>
+                    <br>
                     <span class="description">
-                        <?php echo esc_html__('Select from packages uploaded in the Updates section.', 'update-controller'); ?>
-                        <a href="<?php echo esc_url(admin_url('admin.php?page=update-controller-updates')); ?>"><?php echo esc_html__('Upload new package', 'update-controller'); ?></a>
+                        <?php if (!empty($updates)) : ?>
+                            <?php echo esc_html__('Select from packages uploaded in the Updates section.', 'update-controller'); ?>
+                        <?php else : ?>
+                            <strong style="color: #d63638;"><?php echo esc_html__('You need to upload packages first!', 'update-controller'); ?></strong>
+                        <?php endif; ?>
+                        <a href="<?php echo esc_url(admin_url('admin.php?page=update-controller-updates')); ?>"><?php echo esc_html__('Go to Updates page to upload packages', 'update-controller'); ?></a>
                     </span>
                 </p>
             </div>

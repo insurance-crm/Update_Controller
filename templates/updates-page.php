@@ -2,6 +2,27 @@
     <h1><?php echo esc_html__('Update Packages', 'update-controller'); ?></h1>
     <p class="description"><?php echo esc_html__('Upload and manage plugin ZIP files here. These packages can be used as update sources for your plugins.', 'update-controller'); ?></p>
     
+    <?php
+    // Show directory info
+    $upload_dir = wp_upload_dir();
+    $uc_dir = $upload_dir['basedir'] . '/update-controller';
+    $uc_url = $upload_dir['baseurl'] . '/update-controller';
+    ?>
+    <div class="notice notice-info">
+        <p>
+            <strong><?php echo esc_html__('Upload Directory:', 'update-controller'); ?></strong> <code><?php echo esc_html($uc_dir); ?></code><br>
+            <strong><?php echo esc_html__('URL Base:', 'update-controller'); ?></strong> <code><?php echo esc_html($uc_url); ?></code>
+        </p>
+        <p>
+            <?php echo esc_html__('If you get 403 Forbidden errors when downloading, check:', 'update-controller'); ?>
+            <ol>
+                <li><?php echo esc_html__('Web server allows access to wp-content/uploads/update-controller/', 'update-controller'); ?></li>
+                <li><?php echo esc_html__('No security plugins blocking direct file access', 'update-controller'); ?></li>
+                <li><?php echo esc_html__('.htaccess rules are not blocking access', 'update-controller'); ?></li>
+            </ol>
+        </p>
+    </div>
+    
     <div class="uc-actions">
         <button type="button" class="button button-primary" id="uc-add-update-btn" onclick="openUploadModal()">
             <?php echo esc_html__('Upload New Package', 'update-controller'); ?>
