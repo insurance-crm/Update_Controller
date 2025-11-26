@@ -39,6 +39,7 @@ class Update_Controller {
     private $sites_table;
     private $plugins_table;
     private $updates_table;
+    private $logs_table;
     
     /**
      * Get singleton instance
@@ -58,6 +59,7 @@ class Update_Controller {
         $this->sites_table = $wpdb->prefix . 'uc_sites';
         $this->plugins_table = $wpdb->prefix . 'uc_plugins';
         $this->updates_table = $wpdb->prefix . 'uc_updates';
+        $this->logs_table = $wpdb->prefix . 'uc_update_logs';
         
         // Include required files
         $this->include_files();
@@ -150,6 +152,13 @@ class Update_Controller {
      */
     public function get_updates_table() {
         return $this->updates_table;
+    }
+    
+    /**
+     * Get logs table name
+     */
+    public function get_logs_table() {
+        return $this->logs_table;
     }
 }
 

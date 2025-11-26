@@ -50,6 +50,15 @@ class UC_Admin {
             'update-controller-updates',
             array(__CLASS__, 'render_updates_page')
         );
+        
+        add_submenu_page(
+            'update-controller',
+            __('Update Logs', 'update-controller'),
+            __('Logs', 'update-controller'),
+            'manage_options',
+            'update-controller-logs',
+            array(__CLASS__, 'render_logs_page')
+        );
     }
     
     /**
@@ -128,6 +137,20 @@ class UC_Admin {
         $updates = UC_Database::get_updates();
         
         include UPDATE_CONTROLLER_PLUGIN_DIR . 'templates/updates-page.php';
+    }
+    
+    /**
+     * Render logs page
+     */
+    public static function render_logs_page() {
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions to access this page.', 'update-controller'));
+        }
+        
+        $logs = UC_Database::get_update_logs_with_details();
+        $sites = UC_Database::get_sites();
+        
+        include UPDATE_CONTROLLER_PLUGIN_DIR . 'templates/logs-page.php';
     }
     
     /**

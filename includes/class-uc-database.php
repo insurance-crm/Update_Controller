@@ -65,26 +65,47 @@ class UC_Database {
             PRIMARY KEY  (id)
         ) $charset_collate;";
         
+        // Update logs table
+        $logs_table = $wpdb->prefix . 'uc_update_logs';
+        $logs_sql = "CREATE TABLE $logs_table (
+            id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            site_id bigint(20) UNSIGNED NOT NULL,
+            plugin_id bigint(20) UNSIGNED NOT NULL,
+            plugin_name varchar(255) NOT NULL,
+            from_version varchar(50) DEFAULT '',
+            to_version varchar(50) DEFAULT '',
+            status varchar(20) DEFAULT 'success',
+            message text,
+            backup_file varchar(500) DEFAULT '',
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY  (id),
+            KEY site_id (site_id),
+            KEY plugin_id (plugin_id)
+        ) $charset_collate;";
+        
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         
         $result_sites = dbDelta($sites_sql);
         $result_plugins = dbDelta($plugins_sql);
         $result_updates = dbDelta($updates_sql);
+        $result_logs = dbDelta($logs_sql);
         
         // Log results for debugging
         if (defined('WP_DEBUG') && WP_DEBUG) {
             error_log('Update Controller: Sites table creation result - ' . print_r($result_sites, true));
             error_log('Update Controller: Plugins table creation result - ' . print_r($result_plugins, true));
             error_log('Update Controller: Updates table creation result - ' . print_r($result_updates, true));
+            error_log('Update Controller: Logs table creation result - ' . print_r($result_logs, true));
         }
         
         // Verify tables were created
         $sites_exists = $wpdb->get_var("SHOW TABLES LIKE '$sites_table'") == $sites_table;
         $plugins_exists = $wpdb->get_var("SHOW TABLES LIKE '$plugins_table'") == $plugins_table;
         $updates_exists = $wpdb->get_var("SHOW TABLES LIKE '$updates_table'") == $updates_table;
+        $logs_exists = $wpdb->get_var("SHOW TABLES LIKE '$logs_table'") == $logs_table;
         
-        if (!$sites_exists || !$plugins_exists || !$updates_exists) {
-            error_log('Update Controller: Table creation failed. Sites exists: ' . ($sites_exists ? 'yes' : 'no') . ', Plugins exists: ' . ($plugins_exists ? 'yes' : 'no') . ', Updates exists: ' . ($updates_exists ? 'yes' : 'no'));
+        if (!$sites_exists || !$plugins_exists || !$updates_exists || !$logs_exists) {
+            error_log('Update Controller: Table creation failed. Sites exists: ' . ($sites_exists ? 'yes' : 'no') . ', Plugins exists: ' . ($plugins_exists ? 'yes' : 'no') . ', Updates exists: ' . ($updates_exists ? 'yes' : 'no') . ', Logs exists: ' . ($logs_exists ? 'yes' : 'no'));
         }
     }
     
@@ -382,5 +403,98 @@ class UC_Database {
         }
         
         return $wpdb->delete($table, array('id' => $update_id), array('%d'));
+    }
+    
+    /**
+     * Add update log entry
+     */
+    public static function add_update_log($site_id, $plugin_id, $plugin_name, $from_version, $to_version, $status = 'success', $message = '', $backup_file = '') {
+        global $wpdb;
+        $table = $wpdb->prefix . 'uc_update_logs';
+        
+        $result = $wpdb->insert(
+            $table,
+            array(
+                'site_id' => intval($site_id),
+                'plugin_id' => intval($plugin_id),
+                'plugin_name' => sanitize_text_field($plugin_name),
+                'from_version' => sanitize_text_field($from_version),
+                'to_version' => sanitize_text_field($to_version),
+                'status' => sanitize_text_field($status),
+                'message' => sanitize_text_field($message),
+                'backup_file' => sanitize_text_field($backup_file)
+            ),
+            array('%d', '%d', '%s', '%s', '%s', '%s', '%s', '%s')
+        );
+        
+        return $result !== false ? $wpdb->insert_id : false;
+    }
+    
+    /**
+     * Get all update logs
+     */
+    public static function get_update_logs($site_id = null, $limit = 100) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'uc_update_logs';
+        
+        if ($site_id) {
+            return $wpdb->get_results($wpdb->prepare(
+                "SELECT * FROM $table WHERE site_id = %d ORDER BY created_at DESC LIMIT %d",
+                $site_id,
+                $limit
+            ));
+        }
+        
+        return $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $table ORDER BY created_at DESC LIMIT %d",
+            $limit
+        ));
+    }
+    
+    /**
+     * Get update logs with site and plugin names
+     */
+    public static function get_update_logs_with_details($limit = 100) {
+        global $wpdb;
+        $logs_table = $wpdb->prefix . 'uc_update_logs';
+        $sites_table = $wpdb->prefix . 'uc_sites';
+        
+        return $wpdb->get_results($wpdb->prepare(
+            "SELECT l.*, s.site_name 
+             FROM $logs_table l 
+             LEFT JOIN $sites_table s ON l.site_id = s.id 
+             ORDER BY l.created_at DESC 
+             LIMIT %d",
+            $limit
+        ));
+    }
+    
+    /**
+     * Get backups for a site
+     */
+    public static function get_site_backups($site_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'uc_update_logs';
+        
+        return $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $table WHERE site_id = %d AND backup_file != '' ORDER BY created_at DESC",
+            $site_id
+        ));
+    }
+    
+    /**
+     * Delete update log
+     */
+    public static function delete_update_log($log_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'uc_update_logs';
+        
+        // Get backup file path to delete
+        $log = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id = %d", $log_id));
+        if ($log && !empty($log->backup_file) && file_exists($log->backup_file)) {
+            @unlink($log->backup_file);
+        }
+        
+        return $wpdb->delete($table, array('id' => $log_id), array('%d'));
     }
 }

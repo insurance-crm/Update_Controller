@@ -154,6 +154,7 @@ jQuery(document).ready(function($) {
     // Toggle source method (URL vs Package)
     function toggleSourceMethod() {
         var method = $('#uc-source-method').val();
+        console.log('Toggle source method:', method);
         if (method === 'package') {
             $('#uc-source-url-fields').hide();
             $('#uc-source-package-fields').show();
@@ -164,6 +165,11 @@ jQuery(document).ready(function($) {
             $('#uc-update-source').prop('required', true);
         }
     }
+    
+    // Use both direct binding and event delegation for source method toggle
+    $('#uc-source-method').on('change', function() {
+        toggleSourceMethod();
+    });
     
     $(document).on('change', '#uc-source-method', function() {
         toggleSourceMethod();
