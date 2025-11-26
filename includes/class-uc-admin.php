@@ -391,17 +391,96 @@ class UC_Admin {
         
         // Both tests passed!
         $test_data = json_decode($test_body, true);
+        $companion_updated = false;
+        $update_message = '';
+        
+        // Check if companion plugin needs update
+        $local_companion_file = UPDATE_CONTROLLER_PLUGIN_DIR . 'companion-plugin/update-controller-companion.php';
+        if (file_exists($local_companion_file)) {
+            $local_content = file_get_contents($local_companion_file);
+            $local_size = filesize($local_companion_file);
+            
+            // Get version from local file
+            preg_match('/Version:\s*([0-9.]+)/i', $local_content, $local_matches);
+            $local_version = isset($local_matches[1]) ? $local_matches[1] : '0.0.0';
+            
+            $remote_version = isset($test_data['version']) ? $test_data['version'] : '0.0.0';
+            $remote_size = isset($test_data['file_size']) ? $test_data['file_size'] : 0;
+            
+            // Compare versions and sizes
+            if (version_compare($local_version, $remote_version, '>') || ($local_size != $remote_size && $local_version === $remote_version)) {
+                // Update the companion plugin on remote site
+                $update_result = self::update_remote_companion($site, $local_content, $password);
+                
+                if ($update_result['success']) {
+                    $companion_updated = true;
+                    $update_message = sprintf(
+                        __('Companion plugin updated from v%s to v%s', 'update-controller'),
+                        $remote_version,
+                        $local_version
+                    );
+                    
+                    // Log the companion update
+                    UC_Database::add_update_log(
+                        $site_id,
+                        0, // No plugin_id for companion
+                        'Update Controller Companion',
+                        $remote_version,
+                        $local_version,
+                        'success',
+                        $update_message,
+                        ''
+                    );
+                }
+            }
+        }
+        
+        $message = __('✓ Connection successful! Companion plugin is active and authentication works.', 'update-controller');
+        if ($companion_updated) {
+            $message .= ' ' . $update_message;
+        }
+        
         wp_send_json_success(array(
-            'message' => __('✓ Connection successful! Companion plugin is active and authentication works.', 'update-controller'),
+            'message' => $message,
             'details' => array(
                 'companion_status' => 'OK',
                 'auth_status' => 'OK',
                 'companion_version' => isset($test_data['version']) ? $test_data['version'] : 'unknown',
                 'wp_version' => isset($test_data['wp_version']) ? $test_data['wp_version'] : 'unknown',
-                'site_url' => isset($test_data['site_url']) ? $test_data['site_url'] : $site_url
+                'site_url' => isset($test_data['site_url']) ? $test_data['site_url'] : $site_url,
+                'companion_updated' => $companion_updated
             )
         ));
         exit;
+    }
+    
+    /**
+     * Update companion plugin on remote site
+     */
+    private static function update_remote_companion($site, $file_content, $password) {
+        $site_url = rtrim($site->site_url, '/');
+        
+        $response = wp_remote_post($site_url . '/wp-json/uc-companion/v1/update-companion', array(
+            'headers' => array(
+                'Authorization' => 'Basic ' . base64_encode($site->username . ':' . $password),
+                'Content-Type' => 'text/plain'
+            ),
+            'body' => $file_content,
+            'timeout' => 60
+        ));
+        
+        if (is_wp_error($response)) {
+            return array('success' => false, 'message' => $response->get_error_message());
+        }
+        
+        $code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        
+        if ($code === 200 && isset($body['success']) && $body['success']) {
+            return array('success' => true, 'message' => isset($body['message']) ? $body['message'] : '');
+        }
+        
+        return array('success' => false, 'message' => isset($body['message']) ? $body['message'] : 'Unknown error');
     }
     
     /**
@@ -704,6 +783,67 @@ class UC_Admin {
         header('Pragma: no-cache');
         
         readfile($file_path);
+        exit;
+    }
+    
+    /**
+     * AJAX: Delete backup file
+     */
+    public static function ajax_delete_backup() {
+        check_ajax_referer('uc_delete_backup', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => __('Insufficient permissions', 'update-controller')));
+            exit;
+        }
+        
+        $log_id = isset($_POST['log_id']) ? intval($_POST['log_id']) : 0;
+        
+        if (empty($log_id)) {
+            wp_send_json_error(array('message' => __('Invalid log ID', 'update-controller')));
+            exit;
+        }
+        
+        global $wpdb;
+        $table = $wpdb->prefix . 'uc_update_logs';
+        $log = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id = %d", $log_id));
+        
+        if (!$log) {
+            wp_send_json_error(array('message' => __('Log not found', 'update-controller')));
+            exit;
+        }
+        
+        if (!empty($log->backup_file) && file_exists($log->backup_file)) {
+            // Verify the file is in our backups directory
+            $upload_dir = wp_upload_dir();
+            $allowed_path = $upload_dir['basedir'] . '/update-controller/backups/';
+            
+            $real_path = realpath($log->backup_file);
+            $real_allowed = realpath($allowed_path);
+            
+            if ($real_path && $real_allowed && strpos($real_path, $real_allowed) === 0) {
+                $deleted = unlink($log->backup_file);
+                
+                if ($deleted) {
+                    // Update the log to remove backup_file reference
+                    $wpdb->update(
+                        $table,
+                        array('backup_file' => ''),
+                        array('id' => $log_id),
+                        array('%s'),
+                        array('%d')
+                    );
+                    
+                    wp_send_json_success(array('message' => __('Backup deleted successfully', 'update-controller')));
+                } else {
+                    wp_send_json_error(array('message' => __('Failed to delete backup file', 'update-controller')));
+                }
+            } else {
+                wp_send_json_error(array('message' => __('Invalid backup file path', 'update-controller')));
+            }
+        } else {
+            wp_send_json_error(array('message' => __('Backup file not found', 'update-controller')));
+        }
         exit;
     }
 }

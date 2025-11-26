@@ -49,6 +49,9 @@
                                 <a href="<?php echo esc_url(admin_url('admin-ajax.php?action=uc_download_backup&log_id=' . $log->id . '&nonce=' . wp_create_nonce('uc_download_backup_' . $log->id))); ?>" class="button button-small">
                                     <?php echo esc_html__('Download', 'update-controller'); ?>
                                 </a>
+                                <button type="button" class="button button-small uc-delete-backup" data-log-id="<?php echo esc_attr($log->id); ?>" title="<?php echo esc_attr__('Delete Backup', 'update-controller'); ?>">
+                                    <?php echo esc_html__('Delete', 'update-controller'); ?>
+                                </button>
                             <?php else : ?>
                                 -
                             <?php endif; ?>
@@ -75,4 +78,41 @@ function filterLogs(siteId) {
         }
     });
 }
+
+// Delete backup handler
+jQuery(document).ready(function($) {
+    $(document).on('click', '.uc-delete-backup', function() {
+        if (!confirm('<?php echo esc_js(__('Are you sure you want to delete this backup file?', 'update-controller')); ?>')) {
+            return;
+        }
+        
+        var $button = $(this);
+        var logId = $button.data('log-id');
+        var $cell = $button.closest('td');
+        
+        $button.prop('disabled', true).text('<?php echo esc_js(__('Deleting...', 'update-controller')); ?>');
+        
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'uc_delete_backup',
+                log_id: logId,
+                nonce: '<?php echo wp_create_nonce('uc_delete_backup'); ?>'
+            },
+            success: function(response) {
+                if (response.success) {
+                    $cell.html('-');
+                } else {
+                    alert(response.data.message || '<?php echo esc_js(__('Error deleting backup', 'update-controller')); ?>');
+                    $button.prop('disabled', false).text('<?php echo esc_js(__('Delete', 'update-controller')); ?>');
+                }
+            },
+            error: function() {
+                alert('<?php echo esc_js(__('Error deleting backup', 'update-controller')); ?>');
+                $button.prop('disabled', false).text('<?php echo esc_js(__('Delete', 'update-controller')); ?>');
+            }
+        });
+    });
+});
 </script>

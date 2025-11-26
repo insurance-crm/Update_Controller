@@ -3,7 +3,7 @@
  * Plugin Name: Update Controller Companion
  * Plugin URI: https://github.com/insurance-crm/Update_Controller
  * Description: Companion plugin for Update Controller - allows remote plugin updates via REST API.
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: Insurance CRM
  * Author URI: https://github.com/insurance-crm
  * License: GPL v2 or later
@@ -80,7 +80,19 @@ class UC_Companion {
             'callback' => array(__CLASS__, 'backup_plugin'),
             'permission_callback' => array(__CLASS__, 'check_permission')
         ));
+        
+        // Update companion plugin endpoint
+        register_rest_route('uc-companion/v1', '/update-companion', array(
+            'methods' => 'POST',
+            'callback' => array(__CLASS__, 'update_companion'),
+            'permission_callback' => array(__CLASS__, 'check_permission')
+        ));
     }
+    
+    /**
+     * Get companion plugin version constant
+     */
+    const VERSION = '1.0.1';
     
     /**
      * Test connection endpoint
@@ -89,9 +101,11 @@ class UC_Companion {
         return array(
             'success' => true,
             'message' => 'Update Controller Companion is active and ready',
-            'version' => '1.0.0',
+            'version' => self::VERSION,
             'wp_version' => get_bloginfo('version'),
-            'site_url' => get_site_url()
+            'site_url' => get_site_url(),
+            'plugin_file' => __FILE__,
+            'file_size' => filesize(__FILE__)
         );
     }
     
@@ -564,6 +578,53 @@ class UC_Companion {
             'backup_file' => $backup_path,
             'backup_url' => $backup_url,
             'file_size' => filesize($backup_path)
+        );
+    }
+    
+    /**
+     * Update companion plugin
+     */
+    public static function update_companion($request) {
+        $file_content = $request->get_body();
+        
+        if (empty($file_content)) {
+            return new WP_Error('missing_content', __('Missing plugin file content', 'update-controller-companion'), array('status' => 400));
+        }
+        
+        // Get current plugin file path
+        $current_file = __FILE__;
+        $old_version = self::VERSION;
+        
+        // Create backup of current file
+        $backup_file = $current_file . '.backup';
+        if (!copy($current_file, $backup_file)) {
+            return new WP_Error('backup_failed', __('Failed to create backup of current companion plugin', 'update-controller-companion'), array('status' => 500));
+        }
+        
+        // Write new content
+        $bytes_written = file_put_contents($current_file, $file_content);
+        
+        if ($bytes_written === false) {
+            // Restore from backup
+            copy($backup_file, $current_file);
+            unlink($backup_file);
+            return new WP_Error('write_failed', __('Failed to update companion plugin', 'update-controller-companion'), array('status' => 500));
+        }
+        
+        // Get new version from updated file
+        $new_content = file_get_contents($current_file);
+        preg_match('/Version:\s*([0-9.]+)/i', $new_content, $matches);
+        $new_version = isset($matches[1]) ? $matches[1] : 'unknown';
+        
+        // Remove backup file
+        unlink($backup_file);
+        
+        return array(
+            'success' => true,
+            'message' => __('Companion plugin updated successfully', 'update-controller-companion'),
+            'old_version' => $old_version,
+            'new_version' => $new_version,
+            'bytes_written' => $bytes_written
         );
     }
 }

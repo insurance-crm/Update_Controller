@@ -103,8 +103,9 @@ class Update_Controller {
         add_action('wp_ajax_uc_delete_update_package', array('UC_Admin', 'ajax_delete_update_package'));
         add_action('wp_ajax_uc_get_update_packages', array('UC_Admin', 'ajax_get_update_packages'));
         
-        // Backup download handler
+        // Backup handlers
         add_action('wp_ajax_uc_download_backup', array('UC_Admin', 'ajax_download_backup'));
+        add_action('wp_ajax_uc_delete_backup', array('UC_Admin', 'ajax_delete_backup'));
         
         // Scheduled update hook
         add_action('uc_scheduled_update', array('UC_Updater', 'run_scheduled_update'));
