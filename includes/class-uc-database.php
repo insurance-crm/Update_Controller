@@ -500,4 +500,37 @@ class UC_Database {
         
         return $wpdb->delete($table, array('id' => $log_id), array('%d'));
     }
+    
+    /**
+     * Update site status
+     */
+    public static function update_site_status($site_id, $status) {
+        global $wpdb;
+        $controller = Update_Controller::get_instance();
+        $table = $controller->get_sites_table();
+        
+        return $wpdb->update(
+            $table,
+            array('status' => sanitize_text_field($status)),
+            array('id' => $site_id),
+            array('%s'),
+            array('%d')
+        );
+    }
+    
+    /**
+     * Clear backup file from log entry
+     */
+    public static function clear_log_backup($log_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'uc_update_logs';
+        
+        return $wpdb->update(
+            $table,
+            array('backup_file' => ''),
+            array('id' => $log_id),
+            array('%s'),
+            array('%d')
+        );
+    }
 }

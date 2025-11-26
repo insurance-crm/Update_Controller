@@ -3,7 +3,7 @@
  * Plugin Name: Update Controller Companion
  * Plugin URI: https://github.com/insurance-crm/Update_Controller
  * Description: Companion plugin for Update Controller - allows remote plugin updates via REST API.
- * Version: 1.0.1
+ * Version: 1.0.2
  * Author: Insurance CRM
  * Author URI: https://github.com/insurance-crm
  * License: GPL v2 or later
@@ -24,7 +24,7 @@ class UC_Companion {
     /**
      * Plugin version - must match the Version in plugin header
      */
-    const VERSION = '1.0.1';
+    const VERSION = '1.0.2';
     
     /**
      * Initialize the companion plugin
@@ -591,47 +591,63 @@ class UC_Companion {
             return new WP_Error('missing_content', __('Missing plugin file content', 'update-controller-companion'), array('status' => 400));
         }
         
+        // Basic validation - ensure this looks like PHP
+        if (strpos($file_content, '<?php') === false) {
+            return new WP_Error('invalid_content', __('Invalid plugin file content - not a PHP file', 'update-controller-companion'), array('status' => 400));
+        }
+        
         // Get current plugin file path
         $current_file = __FILE__;
         $old_version = self::VERSION;
         
+        // Check if file is writable
+        if (!is_writable($current_file)) {
+            $perms = substr(sprintf('%o', fileperms($current_file)), -4);
+            return new WP_Error('not_writable', 
+                sprintf(__('Companion plugin file is not writable. Current permissions: %s', 'update-controller-companion'), $perms), 
+                array('status' => 500));
+        }
+        
         // Create backup of current file
-        $backup_file = $current_file . '.backup';
+        $backup_file = $current_file . '.backup.' . time();
         if (!copy($current_file, $backup_file)) {
             return new WP_Error('backup_failed', __('Failed to create backup of current companion plugin', 'update-controller-companion'), array('status' => 500));
         }
         
         // Write new content
-        $bytes_written = file_put_contents($current_file, $file_content);
+        $bytes_written = @file_put_contents($current_file, $file_content);
         
         if ($bytes_written === false) {
             // Restore from backup with error checking
-            $restored = copy($backup_file, $current_file);
+            $restored = @copy($backup_file, $current_file);
             if ($restored) {
-                unlink($backup_file);
+                @unlink($backup_file);
             }
             return new WP_Error('write_failed', __('Failed to update companion plugin. Backup restored.', 'update-controller-companion'), array('status' => 500));
         }
         
-        // Verify the new file is valid PHP by checking syntax
-        $syntax_check = shell_exec('php -l ' . escapeshellarg($current_file) . ' 2>&1');
-        if (strpos($syntax_check, 'No syntax errors') === false) {
-            // Restore from backup if syntax is invalid
-            $restored = copy($backup_file, $current_file);
+        // Basic PHP syntax validation - check for common errors without shell_exec
+        // shell_exec may not be available on all servers
+        $new_file_content = file_get_contents($current_file);
+        
+        // Check if the file still contains necessary markers
+        if (strpos($new_file_content, 'Plugin Name:') === false || 
+            strpos($new_file_content, 'class UC_Companion') === false) {
+            // Restore from backup if file seems corrupted
+            $restored = @copy($backup_file, $current_file);
             if ($restored) {
-                unlink($backup_file);
+                @unlink($backup_file);
             }
-            return new WP_Error('invalid_php', __('Updated file has PHP syntax errors. Backup restored.', 'update-controller-companion'), array('status' => 500));
+            return new WP_Error('invalid_php', __('Updated file appears to be invalid or corrupted. Backup restored.', 'update-controller-companion'), array('status' => 500));
         }
         
         // Get new version from updated file
-        $new_content = file_get_contents($current_file);
-        preg_match('/Version:\s*([0-9.]+)/i', $new_content, $matches);
+        preg_match('/Version:\s*([0-9.]+)/i', $new_file_content, $matches);
         $new_version = isset($matches[1]) ? $matches[1] : 'unknown';
         
         // Remove backup file only after successful update
         if (file_exists($backup_file)) {
-            unlink($backup_file);
+            @unlink($backup_file);
         }
         
         return array(
