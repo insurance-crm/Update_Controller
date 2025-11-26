@@ -580,7 +580,7 @@ class UC_Admin {
             }
         }
         
-        // Fallback: Use upload-plugin + install-plugin for old companion versions
+        // Fallback: Use upload-plugin + install-plugin for old companion versions (v1.0.0)
         // Create a ZIP file with the companion plugin
         $temp_zip = wp_tempnam('companion-update-') . '.zip';
         $zip = new ZipArchive();
@@ -618,22 +618,29 @@ class UC_Admin {
         $upload_code = wp_remote_retrieve_response_code($upload_response);
         $upload_body = json_decode(wp_remote_retrieve_body($upload_response), true);
         
-        if ($upload_code !== 200 || !isset($upload_body['file_path'])) {
+        // Old companion (v1.0.0) returns file_id, new companion might return file_path
+        $file_id = isset($upload_body['file_id']) ? $upload_body['file_id'] : null;
+        $file_path = isset($upload_body['file_path']) ? $upload_body['file_path'] : null;
+        
+        if ($upload_code !== 200 || (!$file_id && !$file_path)) {
             return array('success' => false, 'message' => 'Upload failed: ' . (isset($upload_body['message']) ? $upload_body['message'] : 'Unknown error'));
         }
         
-        $remote_file_path = $upload_body['file_path'];
-        
         // Step 2: Install the uploaded plugin (this will overwrite the existing one)
+        // Old companion uses file_id, new companion might use file_path
+        $install_params = array('overwrite' => true);
+        if ($file_id) {
+            $install_params['file_id'] = $file_id;
+        } else {
+            $install_params['file_path'] = $file_path;
+        }
+        
         $install_response = wp_remote_post($site_url . '/wp-json/uc-companion/v1/install-plugin', array(
             'headers' => array(
                 'Authorization' => $auth_header,
                 'Content-Type' => 'application/json'
             ),
-            'body' => json_encode(array(
-                'file_path' => $remote_file_path,
-                'overwrite' => true
-            )),
+            'body' => json_encode($install_params),
             'timeout' => 60
         ));
         
