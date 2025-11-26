@@ -407,7 +407,8 @@ class UC_Admin {
             $remote_version = isset($test_data['version']) ? $test_data['version'] : '0.0.0';
             $remote_size = isset($test_data['file_size']) ? $test_data['file_size'] : 0;
             
-            // Compare versions and sizes
+            // Compare versions and sizes - push local (server) version to remote site if newer or different
+            // local = Update Controller server, remote = target WordPress site
             if (version_compare($local_version, $remote_version, '>') || ($local_size != $remote_size && $local_version === $remote_version)) {
                 // Update the companion plugin on remote site
                 $update_result = self::update_remote_companion($site, $local_content, $password);
@@ -790,14 +791,15 @@ class UC_Admin {
      * AJAX: Delete backup file
      */
     public static function ajax_delete_backup() {
-        check_ajax_referer('uc_delete_backup', 'nonce');
+        $log_id = isset($_POST['log_id']) ? intval($_POST['log_id']) : 0;
+        
+        // Use per-log nonce for better security
+        check_ajax_referer('uc_delete_backup_' . $log_id, 'nonce');
         
         if (!current_user_can('manage_options')) {
             wp_send_json_error(array('message' => __('Insufficient permissions', 'update-controller')));
             exit;
         }
-        
-        $log_id = isset($_POST['log_id']) ? intval($_POST['log_id']) : 0;
         
         if (empty($log_id)) {
             wp_send_json_error(array('message' => __('Invalid log ID', 'update-controller')));
@@ -814,32 +816,49 @@ class UC_Admin {
         }
         
         if (!empty($log->backup_file) && file_exists($log->backup_file)) {
-            // Verify the file is in our backups directory
+            // Verify the file is in our backups directory using strict path validation
             $upload_dir = wp_upload_dir();
-            $allowed_path = $upload_dir['basedir'] . '/update-controller/backups/';
+            $allowed_path = realpath($upload_dir['basedir'] . '/update-controller/backups');
             
+            // Get real path and ensure it's resolved (no symlinks, relative paths)
             $real_path = realpath($log->backup_file);
-            $real_allowed = realpath($allowed_path);
             
-            if ($real_path && $real_allowed && strpos($real_path, $real_allowed) === 0) {
-                $deleted = unlink($log->backup_file);
-                
-                if ($deleted) {
-                    // Update the log to remove backup_file reference
-                    $wpdb->update(
-                        $table,
-                        array('backup_file' => ''),
-                        array('id' => $log_id),
-                        array('%s'),
-                        array('%d')
-                    );
-                    
-                    wp_send_json_success(array('message' => __('Backup deleted successfully', 'update-controller')));
-                } else {
-                    wp_send_json_error(array('message' => __('Failed to delete backup file', 'update-controller')));
-                }
-            } else {
+            // Security checks:
+            // 1. Both paths must resolve to real paths
+            // 2. Real path must start with allowed path
+            // 3. File must have .zip extension
+            // 4. Path must not contain null bytes or parent directory traversal
+            if ($real_path === false || $allowed_path === false) {
                 wp_send_json_error(array('message' => __('Invalid backup file path', 'update-controller')));
+                exit;
+            }
+            
+            if (strpos($real_path, $allowed_path . DIRECTORY_SEPARATOR) !== 0) {
+                wp_send_json_error(array('message' => __('Backup file is outside allowed directory', 'update-controller')));
+                exit;
+            }
+            
+            $file_ext = strtolower(pathinfo($real_path, PATHINFO_EXTENSION));
+            if ($file_ext !== 'zip') {
+                wp_send_json_error(array('message' => __('Invalid backup file type', 'update-controller')));
+                exit;
+            }
+            
+            $deleted = unlink($real_path);
+            
+            if ($deleted) {
+                // Update the log to remove backup_file reference
+                $wpdb->update(
+                    $table,
+                    array('backup_file' => ''),
+                    array('id' => $log_id),
+                    array('%s'),
+                    array('%d')
+                );
+                
+                wp_send_json_success(array('message' => __('Backup deleted successfully', 'update-controller')));
+            } else {
+                wp_send_json_error(array('message' => __('Failed to delete backup file', 'update-controller')));
             }
         } else {
             wp_send_json_error(array('message' => __('Backup file not found', 'update-controller')));

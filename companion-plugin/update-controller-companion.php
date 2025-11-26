@@ -22,6 +22,11 @@ if (!defined('ABSPATH')) {
 class UC_Companion {
     
     /**
+     * Plugin version - must match the Version in plugin header
+     */
+    const VERSION = '1.0.1';
+    
+    /**
      * Initialize the companion plugin
      */
     public static function init() {
@@ -88,11 +93,6 @@ class UC_Companion {
             'permission_callback' => array(__CLASS__, 'check_permission')
         ));
     }
-    
-    /**
-     * Get companion plugin version constant
-     */
-    const VERSION = '1.0.1';
     
     /**
      * Test connection endpoint
@@ -605,10 +605,23 @@ class UC_Companion {
         $bytes_written = file_put_contents($current_file, $file_content);
         
         if ($bytes_written === false) {
-            // Restore from backup
-            copy($backup_file, $current_file);
-            unlink($backup_file);
-            return new WP_Error('write_failed', __('Failed to update companion plugin', 'update-controller-companion'), array('status' => 500));
+            // Restore from backup with error checking
+            $restored = copy($backup_file, $current_file);
+            if ($restored) {
+                unlink($backup_file);
+            }
+            return new WP_Error('write_failed', __('Failed to update companion plugin. Backup restored.', 'update-controller-companion'), array('status' => 500));
+        }
+        
+        // Verify the new file is valid PHP by checking syntax
+        $syntax_check = shell_exec('php -l ' . escapeshellarg($current_file) . ' 2>&1');
+        if (strpos($syntax_check, 'No syntax errors') === false) {
+            // Restore from backup if syntax is invalid
+            $restored = copy($backup_file, $current_file);
+            if ($restored) {
+                unlink($backup_file);
+            }
+            return new WP_Error('invalid_php', __('Updated file has PHP syntax errors. Backup restored.', 'update-controller-companion'), array('status' => 500));
         }
         
         // Get new version from updated file
@@ -616,8 +629,10 @@ class UC_Companion {
         preg_match('/Version:\s*([0-9.]+)/i', $new_content, $matches);
         $new_version = isset($matches[1]) ? $matches[1] : 'unknown';
         
-        // Remove backup file
-        unlink($backup_file);
+        // Remove backup file only after successful update
+        if (file_exists($backup_file)) {
+            unlink($backup_file);
+        }
         
         return array(
             'success' => true,

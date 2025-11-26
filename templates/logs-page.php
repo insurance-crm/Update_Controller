@@ -49,7 +49,7 @@
                                 <a href="<?php echo esc_url(admin_url('admin-ajax.php?action=uc_download_backup&log_id=' . $log->id . '&nonce=' . wp_create_nonce('uc_download_backup_' . $log->id))); ?>" class="button button-small">
                                     <?php echo esc_html__('Download', 'update-controller'); ?>
                                 </a>
-                                <button type="button" class="button button-small uc-delete-backup" data-log-id="<?php echo esc_attr($log->id); ?>" title="<?php echo esc_attr__('Delete Backup', 'update-controller'); ?>">
+                                <button type="button" class="button button-small uc-delete-backup" data-log-id="<?php echo esc_attr($log->id); ?>" data-nonce="<?php echo esc_attr(wp_create_nonce('uc_delete_backup_' . $log->id)); ?>" title="<?php echo esc_attr__('Delete Backup', 'update-controller'); ?>">
                                     <?php echo esc_html__('Delete', 'update-controller'); ?>
                                 </button>
                             <?php else : ?>
@@ -88,6 +88,7 @@ jQuery(document).ready(function($) {
         
         var $button = $(this);
         var logId = $button.data('log-id');
+        var nonce = $button.data('nonce');
         var $cell = $button.closest('td');
         
         $button.prop('disabled', true).text('<?php echo esc_js(__('Deleting...', 'update-controller')); ?>');
@@ -98,7 +99,7 @@ jQuery(document).ready(function($) {
             data: {
                 action: 'uc_delete_backup',
                 log_id: logId,
-                nonce: '<?php echo wp_create_nonce('uc_delete_backup'); ?>'
+                nonce: nonce
             },
             success: function(response) {
                 if (response.success) {
