@@ -200,6 +200,7 @@ jQuery(document).ready(function($) {
     
     // Function to check a single site status
     function checkSiteStatus(siteId, $row, callback) {
+        console.log('Checking site status for site ID:', siteId);
         $.ajax({
             url: ucAdmin.ajaxUrl,
             type: 'POST',
@@ -209,6 +210,7 @@ jQuery(document).ready(function($) {
                 site_id: siteId
             },
             success: function(response) {
+                console.log('Site status response:', response);
                 if (response.success) {
                     var data = response.data;
                     

@@ -556,6 +556,8 @@ class UC_Admin {
         $site_url = rtrim($site->site_url, '/');
         $auth_header = 'Basic ' . base64_encode($site->username . ':' . $password);
         
+        error_log('Update Controller: Starting companion update for ' . $site_url);
+        
         // First try the direct update-companion endpoint (for v1.0.1+)
         $response = wp_remote_post($site_url . '/wp-json/uc-companion/v1/update-companion', array(
             'headers' => array(
@@ -570,6 +572,8 @@ class UC_Admin {
             $code = wp_remote_retrieve_response_code($response);
             $body = json_decode(wp_remote_retrieve_body($response), true);
             
+            error_log('Update Controller: update-companion response - Code: ' . $code . ', Body: ' . print_r($body, true));
+            
             if ($code === 200 && isset($body['success']) && $body['success']) {
                 return array('success' => true, 'message' => isset($body['message']) ? $body['message'] : '');
             }
@@ -578,9 +582,15 @@ class UC_Admin {
             if ($code !== 404) {
                 return array('success' => false, 'message' => isset($body['message']) ? $body['message'] : 'Update failed with HTTP ' . $code);
             }
+            
+            error_log('Update Controller: update-companion endpoint not found (404), trying fallback method');
+        } else {
+            error_log('Update Controller: update-companion request error - ' . $response->get_error_message());
         }
         
         // Fallback: Use upload-plugin + install-plugin for old companion versions (v1.0.0)
+        error_log('Update Controller: Using fallback method (upload-plugin + install-plugin)');
+        
         // Create a ZIP file with the companion plugin
         $temp_zip = wp_tempnam('companion-update-') . '.zip';
         $zip = new ZipArchive();
@@ -601,6 +611,7 @@ class UC_Admin {
         }
         
         // Step 1: Upload the ZIP file
+        error_log('Update Controller: Uploading companion plugin ZIP file');
         $upload_response = wp_remote_post($site_url . '/wp-json/uc-companion/v1/upload-plugin', array(
             'headers' => array(
                 'Authorization' => $auth_header,
@@ -612,11 +623,14 @@ class UC_Admin {
         ));
         
         if (is_wp_error($upload_response)) {
+            error_log('Update Controller: Upload failed - ' . $upload_response->get_error_message());
             return array('success' => false, 'message' => 'Upload failed: ' . $upload_response->get_error_message());
         }
         
         $upload_code = wp_remote_retrieve_response_code($upload_response);
         $upload_body = json_decode(wp_remote_retrieve_body($upload_response), true);
+        
+        error_log('Update Controller: Upload response - Code: ' . $upload_code . ', Body: ' . print_r($upload_body, true));
         
         // Old companion (v1.0.0) returns file_id, new companion might return file_path
         $file_id = isset($upload_body['file_id']) ? $upload_body['file_id'] : null;
@@ -635,6 +649,7 @@ class UC_Admin {
             $install_params['file_path'] = $file_path;
         }
         
+        error_log('Update Controller: Installing companion plugin with params: ' . print_r($install_params, true));
         $install_response = wp_remote_post($site_url . '/wp-json/uc-companion/v1/install-plugin', array(
             'headers' => array(
                 'Authorization' => $auth_header,
@@ -645,17 +660,29 @@ class UC_Admin {
         ));
         
         if (is_wp_error($install_response)) {
+            error_log('Update Controller: Install failed - ' . $install_response->get_error_message());
             return array('success' => false, 'message' => 'Install failed: ' . $install_response->get_error_message());
         }
         
         $install_code = wp_remote_retrieve_response_code($install_response);
         $install_body = json_decode(wp_remote_retrieve_body($install_response), true);
         
+        // Log the install response for debugging
+        error_log('Update Controller: Companion install response - Code: ' . $install_code . ', Body: ' . print_r($install_body, true));
+        
         if ($install_code === 200 && isset($install_body['success']) && $install_body['success']) {
             return array('success' => true, 'message' => 'Companion plugin updated via install method');
         }
         
-        return array('success' => false, 'message' => isset($install_body['message']) ? $install_body['message'] : 'Install failed with HTTP ' . $install_code);
+        // Add more detailed error message
+        $error_message = isset($install_body['message']) ? $install_body['message'] : 'Install failed with HTTP ' . $install_code;
+        
+        // Check for common issues
+        if (strpos($error_message, 'permission') !== false || strpos($error_message, 'writable') !== false) {
+            $error_message .= ' - Please check file permissions on the remote server (wp-content/plugins should be writable)';
+        }
+        
+        return array('success' => false, 'message' => $error_message);
     }
     
     /**
