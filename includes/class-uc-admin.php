@@ -391,8 +391,9 @@ class UC_Admin {
         
         // Both tests passed!
         $test_data = json_decode($test_body, true);
-        $companion_updated = false;
-        $update_message = '';
+        $companion_needs_update = false;
+        $local_version = '0.0.0';
+        $remote_version = isset($test_data['version']) ? $test_data['version'] : '0.0.0';
         
         // Check if companion plugin needs update
         $local_companion_file = UPDATE_CONTROLLER_PLUGIN_DIR . 'companion-plugin/update-controller-companion.php';
@@ -404,54 +405,110 @@ class UC_Admin {
             preg_match('/Version:\s*([0-9.]+)/i', $local_content, $local_matches);
             $local_version = isset($local_matches[1]) ? $local_matches[1] : '0.0.0';
             
-            $remote_version = isset($test_data['version']) ? $test_data['version'] : '0.0.0';
             $remote_size = isset($test_data['file_size']) ? $test_data['file_size'] : 0;
             
-            // Compare versions and sizes - push local (server) version to remote site if newer or different
+            // Compare versions and sizes - check if local (server) version is newer or different
             // local = Update Controller server, remote = target WordPress site
             if (version_compare($local_version, $remote_version, '>') || ($local_size != $remote_size && $local_version === $remote_version)) {
-                // Update the companion plugin on remote site
-                $update_result = self::update_remote_companion($site, $local_content, $password);
-                
-                if ($update_result['success']) {
-                    $companion_updated = true;
-                    $update_message = sprintf(
-                        __('Companion plugin updated from v%s to v%s', 'update-controller'),
-                        $remote_version,
-                        $local_version
-                    );
-                    
-                    // Log the companion update
-                    UC_Database::add_update_log(
-                        $site_id,
-                        0, // No plugin_id for companion
-                        'Update Controller Companion',
-                        $remote_version,
-                        $local_version,
-                        'success',
-                        $update_message,
-                        ''
-                    );
-                }
+                $companion_needs_update = true;
             }
         }
         
         $message = __('✓ Connection successful! Companion plugin is active and authentication works.', 'update-controller');
-        if ($companion_updated) {
-            $message .= ' ' . $update_message;
-        }
         
         wp_send_json_success(array(
             'message' => $message,
             'details' => array(
                 'companion_status' => 'OK',
                 'auth_status' => 'OK',
-                'companion_version' => isset($test_data['version']) ? $test_data['version'] : 'unknown',
+                'companion_version' => $remote_version,
+                'local_companion_version' => $local_version,
+                'companion_needs_update' => $companion_needs_update,
                 'wp_version' => isset($test_data['wp_version']) ? $test_data['wp_version'] : 'unknown',
-                'site_url' => isset($test_data['site_url']) ? $test_data['site_url'] : $site_url,
-                'companion_updated' => $companion_updated
+                'site_url' => isset($test_data['site_url']) ? $test_data['site_url'] : $site_url
             )
         ));
+        exit;
+    }
+    
+    /**
+     * AJAX: Update companion plugin on remote site
+     */
+    public static function ajax_update_companion() {
+        check_ajax_referer('uc_admin_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => __('Insufficient permissions', 'update-controller')));
+            exit;
+        }
+        
+        $site_id = isset($_POST['site_id']) ? intval($_POST['site_id']) : 0;
+        
+        if (empty($site_id)) {
+            wp_send_json_error(array('message' => __('Invalid site ID', 'update-controller')));
+            exit;
+        }
+        
+        $site = UC_Database::get_site($site_id);
+        
+        if (!$site) {
+            wp_send_json_error(array('message' => __('Site not found', 'update-controller')));
+            exit;
+        }
+        
+        $local_companion_file = UPDATE_CONTROLLER_PLUGIN_DIR . 'companion-plugin/update-controller-companion.php';
+        if (!file_exists($local_companion_file)) {
+            wp_send_json_error(array('message' => __('Local companion plugin file not found', 'update-controller')));
+            exit;
+        }
+        
+        $local_content = file_get_contents($local_companion_file);
+        
+        // Get local version
+        preg_match('/Version:\s*([0-9.]+)/i', $local_content, $local_matches);
+        $local_version = isset($local_matches[1]) ? $local_matches[1] : '0.0.0';
+        
+        // Get remote version first
+        $site_url = rtrim($site->site_url, '/');
+        $test_url = $site_url . '/wp-json/uc-companion/v1/test';
+        $test_response = wp_remote_get($test_url, array('timeout' => 10));
+        
+        $remote_version = '0.0.0';
+        if (!is_wp_error($test_response) && wp_remote_retrieve_response_code($test_response) === 200) {
+            $test_data = json_decode(wp_remote_retrieve_body($test_response), true);
+            $remote_version = isset($test_data['version']) ? $test_data['version'] : '0.0.0';
+        }
+        
+        $password = UC_Encryption::decrypt($site->password);
+        $update_result = self::update_remote_companion($site, $local_content, $password);
+        
+        if ($update_result['success']) {
+            $update_message = sprintf(
+                __('Companion plugin updated from v%s to v%s', 'update-controller'),
+                $remote_version,
+                $local_version
+            );
+            
+            // Log the companion update
+            UC_Database::add_update_log(
+                $site_id,
+                0, // No plugin_id for companion
+                'Update Controller Companion',
+                $remote_version,
+                $local_version,
+                'success',
+                $update_message,
+                ''
+            );
+            
+            wp_send_json_success(array(
+                'message' => $update_message,
+                'old_version' => $remote_version,
+                'new_version' => $local_version
+            ));
+        } else {
+            wp_send_json_error(array('message' => $update_result['message']));
+        }
         exit;
     }
     

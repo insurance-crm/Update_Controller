@@ -70,15 +70,10 @@ jQuery(document).ready(function($) {
     // Test connection
     $(document).on('click', '.uc-test-connection', function(e) {
         e.preventDefault();
-        console.log('Test connection button clicked');
         
         var siteId = $(this).data('id');
         var $button = $(this);
         var originalText = $button.text();
-        
-        console.log('Testing site ID:', siteId);
-        console.log('AJAX URL:', ucAdmin.ajaxUrl);
-        console.log('Nonce:', ucAdmin.nonce);
         
         $button.prop('disabled', true).text('Testing...');
         
@@ -91,20 +86,39 @@ jQuery(document).ready(function($) {
                 site_id: siteId
             },
             success: function(response) {
-                console.log('Test response:', response);
                 if (response.success) {
-                    alert('Connection Test Successful!\n\n' + response.data.message + 
+                    var details = response.data.details;
+                    var message = 'Connection Test Successful!\n\n' + response.data.message + 
                           '\n\nDetails:\n' +
-                          'Companion Plugin: ' + response.data.details.companion_status + '\n' +
-                          'Authentication: ' + response.data.details.auth_status + '\n' +
-                          'WordPress Version: ' + (response.data.details.wp_version || 'unknown'));
+                          'Companion Plugin: ' + details.companion_status + '\n' +
+                          'Remote Version: v' + details.companion_version + '\n' +
+                          'Local Version: v' + details.local_companion_version + '\n' +
+                          'Authentication: ' + details.auth_status + '\n' +
+                          'WordPress Version: ' + (details.wp_version || 'unknown');
+                    
+                    // Check if companion plugin needs update
+                    if (details.companion_needs_update) {
+                        var updateConfirm = confirm(
+                            message + '\n\n' +
+                            '⚠️ WARNING: Companion plugin version mismatch detected!\n' +
+                            'Remote site has v' + details.companion_version + ' but server has v' + details.local_companion_version + '\n\n' +
+                            'Do you want to update the companion plugin on the remote site?'
+                        );
+                        
+                        if (updateConfirm) {
+                            // Update companion plugin
+                            updateCompanionPlugin(siteId, $button, originalText);
+                            return;
+                        }
+                    } else {
+                        alert(message);
+                    }
                 } else {
                     alert('Connection Test Failed!\n\n' + response.data.message +
                           (response.data.details ? '\n\nDetails:\n' + JSON.stringify(response.data.details, null, 2) : ''));
                 }
             },
             error: function(xhr, status, error) {
-                console.log('Test error:', xhr, status, error);
                 alert('Connection Test Error!\n\nFailed to connect to server: ' + error);
             },
             complete: function() {
@@ -112,6 +126,34 @@ jQuery(document).ready(function($) {
             }
         });
     });
+    
+    // Update companion plugin on remote site
+    function updateCompanionPlugin(siteId, $button, originalText) {
+        $button.prop('disabled', true).text('Updating...');
+        
+        $.ajax({
+            url: ucAdmin.ajaxUrl,
+            type: 'POST',
+            data: {
+                action: 'uc_update_companion',
+                nonce: ucAdmin.nonce,
+                site_id: siteId
+            },
+            success: function(response) {
+                if (response.success) {
+                    alert('✓ Companion Plugin Updated Successfully!\n\n' + response.data.message);
+                } else {
+                    alert('Companion Plugin Update Failed!\n\n' + response.data.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                alert('Update Error!\n\nFailed to update companion plugin: ' + error);
+            },
+            complete: function() {
+                $button.prop('disabled', false).text(originalText);
+            }
+        });
+    }
     
     // Submit site form
     $('#uc-site-form').on('submit', function(e) {
