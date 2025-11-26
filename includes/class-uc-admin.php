@@ -1142,4 +1142,98 @@ class UC_Admin {
         ));
         exit;
     }
+    
+    /**
+     * AJAX: Check site status and get plugin versions
+     */
+    public static function ajax_check_site_status() {
+        check_ajax_referer('uc_admin_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => __('Insufficient permissions', 'update-controller')));
+            exit;
+        }
+        
+        $site_id = isset($_POST['site_id']) ? intval($_POST['site_id']) : 0;
+        
+        if (empty($site_id)) {
+            wp_send_json_error(array('message' => __('Invalid site ID', 'update-controller')));
+            exit;
+        }
+        
+        $site = UC_Database::get_site($site_id);
+        
+        if (!$site) {
+            wp_send_json_error(array('message' => __('Site not found', 'update-controller')));
+            exit;
+        }
+        
+        // Get local companion plugin info
+        $local_companion_file = UPDATE_CONTROLLER_PLUGIN_DIR . 'companion-plugin/update-controller-companion.php';
+        $local_version = 'N/A';
+        
+        if (file_exists($local_companion_file)) {
+            $local_content = file_get_contents($local_companion_file);
+            preg_match('/Version:\s*([0-9.]+)/i', $local_content, $matches);
+            $local_version = isset($matches[1]) ? $matches[1] : 'N/A';
+        }
+        
+        // Test connection to remote site
+        $site_url = rtrim($site->site_url, '/');
+        $test_url = $site_url . '/wp-json/uc-companion/v1/test';
+        $test_response = wp_remote_get($test_url, array('timeout' => 15));
+        
+        $connection_status = 'error';
+        $companion_version = 'N/A';
+        $insurance_crm_version = 'N/A';
+        $message = '';
+        
+        if (is_wp_error($test_response)) {
+            $message = $test_response->get_error_message();
+            $connection_status = 'error';
+        } else {
+            $test_code = wp_remote_retrieve_response_code($test_response);
+            $test_body = wp_remote_retrieve_body($test_response);
+            
+            if ($test_code === 200) {
+                $test_data = json_decode($test_body, true);
+                $connection_status = 'active';
+                $companion_version = isset($test_data['version']) && !empty($test_data['version']) ? $test_data['version'] : 'unknown';
+                
+                // Get Insurance CRM plugin version
+                $password = UC_Encryption::decrypt($site->password);
+                $version_url = $site_url . '/wp-json/uc-companion/v1/plugin-version?plugin_slug=insurance-crm/insurance-crm.php';
+                $version_response = wp_remote_get($version_url, array(
+                    'headers' => array(
+                        'Authorization' => 'Basic ' . base64_encode($site->username . ':' . $password)
+                    ),
+                    'timeout' => 15
+                ));
+                
+                if (!is_wp_error($version_response) && wp_remote_retrieve_response_code($version_response) === 200) {
+                    $version_data = json_decode(wp_remote_retrieve_body($version_response), true);
+                    if (isset($version_data['version'])) {
+                        $insurance_crm_version = $version_data['version'];
+                    }
+                }
+                
+                // Update site status in database
+                UC_Database::update_site_status($site_id, 'active');
+            } else {
+                $connection_status = 'inactive';
+                $message = sprintf(__('HTTP %d', 'update-controller'), $test_code);
+                UC_Database::update_site_status($site_id, 'inactive');
+            }
+        }
+        
+        wp_send_json_success(array(
+            'site_id' => $site_id,
+            'connection_status' => $connection_status,
+            'companion_version' => $companion_version,
+            'local_companion_version' => $local_version,
+            'insurance_crm_version' => $insurance_crm_version,
+            'message' => $message
+        ));
+        exit;
+    }
 }

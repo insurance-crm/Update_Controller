@@ -163,6 +163,90 @@ jQuery(document).ready(function($) {
         });
     }
     
+    // Check All Sites button
+    $('#uc-check-all-sites-btn').on('click', function() {
+        var $button = $(this);
+        var $rows = $('#uc-sites-table tbody tr[data-site-id]');
+        var total = $rows.length;
+        var completed = 0;
+        
+        if (total === 0) {
+            alert('No sites to check.');
+            return;
+        }
+        
+        $button.prop('disabled', true).text('Checking...');
+        
+        $rows.each(function(index) {
+            var $row = $(this);
+            var siteId = $row.data('site-id');
+            
+            // Set loading state
+            $row.find('.uc-connection-status').html('<span class="uc-status">Checking...</span>');
+            $row.find('.uc-companion-version').text('...');
+            $row.find('.uc-insurance-crm-version').text('...');
+            
+            // Delay each request slightly to avoid overwhelming the server
+            setTimeout(function() {
+                checkSiteStatus(siteId, $row, function() {
+                    completed++;
+                    if (completed >= total) {
+                        $button.prop('disabled', false).text('Check All Sites');
+                    }
+                });
+            }, index * 300);
+        });
+    });
+    
+    // Function to check a single site status
+    function checkSiteStatus(siteId, $row, callback) {
+        $.ajax({
+            url: ucAdmin.ajaxUrl,
+            type: 'POST',
+            data: {
+                action: 'uc_check_site_status',
+                nonce: ucAdmin.nonce,
+                site_id: siteId
+            },
+            success: function(response) {
+                if (response.success) {
+                    var data = response.data;
+                    
+                    // Update connection status
+                    var statusClass = data.connection_status === 'active' ? 'uc-status-active' : 'uc-status-error';
+                    var statusText = data.connection_status === 'active' ? 'active' : 'error';
+                    $row.find('.uc-connection-status').html('<span class="uc-status ' + statusClass + '">' + statusText + '</span>');
+                    
+                    // Update companion version
+                    var companionHtml = data.companion_version;
+                    if (data.companion_version !== data.local_companion_version && data.companion_version !== 'N/A') {
+                        companionHtml = '<span style="color: #d63638;">' + data.companion_version + '</span>';
+                    } else if (data.companion_version === data.local_companion_version) {
+                        companionHtml = '<span style="color: #00a32a;">' + data.companion_version + '</span>';
+                    }
+                    $row.find('.uc-companion-version').html(companionHtml);
+                    
+                    // Update Insurance CRM version
+                    $row.find('.uc-insurance-crm-version').text(data.insurance_crm_version);
+                } else {
+                    $row.find('.uc-connection-status').html('<span class="uc-status uc-status-error">error</span>');
+                    $row.find('.uc-companion-version').text('N/A');
+                    $row.find('.uc-insurance-crm-version').text('N/A');
+                }
+            },
+            error: function() {
+                $row.find('.uc-connection-status').html('<span class="uc-status uc-status-error">error</span>');
+                $row.find('.uc-companion-version').text('N/A');
+                $row.find('.uc-insurance-crm-version').text('N/A');
+            },
+            complete: function() {
+                if (typeof callback === 'function') {
+                    callback();
+                }
+            }
+        });
+    }
+    
     // Submit site form
     $('#uc-site-form').on('submit', function(e) {
         e.preventDefault();

@@ -111,6 +111,9 @@ class Update_Controller {
         // Companion check handler
         add_action('wp_ajax_uc_check_companion', array('UC_Admin', 'ajax_check_companion'));
         
+        // Site check handler (for Check All Sites)
+        add_action('wp_ajax_uc_check_site_status', array('UC_Admin', 'ajax_check_site_status'));
+        
         // Scheduled update hook
         add_action('uc_scheduled_update', array('UC_Updater', 'run_scheduled_update'));
     }
