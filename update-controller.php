@@ -108,6 +108,9 @@ class Update_Controller {
         add_action('wp_ajax_uc_download_backup', array('UC_Admin', 'ajax_download_backup'));
         add_action('wp_ajax_uc_delete_backup', array('UC_Admin', 'ajax_delete_backup'));
         
+        // Companion check handler
+        add_action('wp_ajax_uc_check_companion', array('UC_Admin', 'ajax_check_companion'));
+        
         // Scheduled update hook
         add_action('uc_scheduled_update', array('UC_Updater', 'run_scheduled_update'));
     }

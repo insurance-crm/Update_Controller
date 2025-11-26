@@ -59,6 +59,15 @@ class UC_Admin {
             'update-controller-logs',
             array(__CLASS__, 'render_logs_page')
         );
+        
+        add_submenu_page(
+            'update-controller',
+            __('Companion Check', 'update-controller'),
+            __('Companion Check', 'update-controller'),
+            'manage_options',
+            'update-controller-companion',
+            array(__CLASS__, 'render_companion_page')
+        );
     }
     
     /**
@@ -151,6 +160,31 @@ class UC_Admin {
         $sites = UC_Database::get_sites();
         
         include UPDATE_CONTROLLER_PLUGIN_DIR . 'templates/logs-page.php';
+    }
+    
+    /**
+     * Render companion check page
+     */
+    public static function render_companion_page() {
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions to access this page.', 'update-controller'));
+        }
+        
+        $sites = UC_Database::get_sites();
+        
+        // Get local companion plugin info
+        $local_companion_file = UPDATE_CONTROLLER_PLUGIN_DIR . 'companion-plugin/update-controller-companion.php';
+        $local_version = 'N/A';
+        $local_size = 0;
+        
+        if (file_exists($local_companion_file)) {
+            $local_content = file_get_contents($local_companion_file);
+            $local_size = filesize($local_companion_file);
+            preg_match('/Version:\s*([0-9.]+)/i', $local_content, $matches);
+            $local_version = isset($matches[1]) ? $matches[1] : 'N/A';
+        }
+        
+        include UPDATE_CONTROLLER_PLUGIN_DIR . 'templates/companion-page.php';
     }
     
     /**
@@ -923,6 +957,109 @@ class UC_Admin {
         } else {
             wp_send_json_error(array('message' => __('Backup file not found', 'update-controller')));
         }
+        exit;
+    }
+    
+    /**
+     * AJAX: Check companion plugin status on a site
+     */
+    public static function ajax_check_companion() {
+        check_ajax_referer('uc_admin_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => __('Insufficient permissions', 'update-controller')));
+            exit;
+        }
+        
+        $site_id = isset($_POST['site_id']) ? intval($_POST['site_id']) : 0;
+        
+        if (empty($site_id)) {
+            wp_send_json_error(array('message' => __('Invalid site ID', 'update-controller')));
+            exit;
+        }
+        
+        $site = UC_Database::get_site($site_id);
+        
+        if (!$site) {
+            wp_send_json_error(array('message' => __('Site not found', 'update-controller')));
+            exit;
+        }
+        
+        // Get local companion plugin info
+        $local_companion_file = UPDATE_CONTROLLER_PLUGIN_DIR . 'companion-plugin/update-controller-companion.php';
+        $local_version = 'N/A';
+        $local_size = 0;
+        
+        if (file_exists($local_companion_file)) {
+            $local_content = file_get_contents($local_companion_file);
+            $local_size = filesize($local_companion_file);
+            preg_match('/Version:\s*([0-9.]+)/i', $local_content, $matches);
+            $local_version = isset($matches[1]) ? $matches[1] : 'N/A';
+        }
+        
+        // Test connection to remote site
+        $site_url = rtrim($site->site_url, '/');
+        $test_url = $site_url . '/wp-json/uc-companion/v1/test';
+        $test_response = wp_remote_get($test_url, array('timeout' => 15));
+        
+        if (is_wp_error($test_response)) {
+            wp_send_json_error(array(
+                'message' => sprintf(__('Connection failed: %s', 'update-controller'), $test_response->get_error_message()),
+                'site_name' => $site->site_name,
+                'local_version' => $local_version,
+                'local_size' => $local_size,
+                'remote_version' => 'N/A',
+                'remote_size' => 0,
+                'status' => 'error'
+            ));
+            exit;
+        }
+        
+        $test_code = wp_remote_retrieve_response_code($test_response);
+        $test_body = wp_remote_retrieve_body($test_response);
+        
+        if ($test_code !== 200) {
+            wp_send_json_error(array(
+                'message' => sprintf(__('Companion plugin not responding (HTTP %d)', 'update-controller'), $test_code),
+                'site_name' => $site->site_name,
+                'local_version' => $local_version,
+                'local_size' => $local_size,
+                'remote_version' => 'N/A',
+                'remote_size' => 0,
+                'status' => 'not_installed'
+            ));
+            exit;
+        }
+        
+        $test_data = json_decode($test_body, true);
+        
+        $remote_version = isset($test_data['version']) && !empty($test_data['version']) ? $test_data['version'] : 'unknown';
+        $remote_size = isset($test_data['file_size']) ? intval($test_data['file_size']) : 0;
+        
+        // Determine if update is needed
+        $needs_update = false;
+        $status = 'ok';
+        
+        if ($remote_version === 'unknown' || $remote_version === 'N/A') {
+            $needs_update = true;
+            $status = 'outdated';
+        } elseif (version_compare($local_version, $remote_version, '>')) {
+            $needs_update = true;
+            $status = 'outdated';
+        } elseif ($local_size != $remote_size && version_compare($local_version, $remote_version, '=')) {
+            $needs_update = true;
+            $status = 'size_mismatch';
+        }
+        
+        wp_send_json_success(array(
+            'site_name' => $site->site_name,
+            'local_version' => $local_version,
+            'local_size' => $local_size,
+            'remote_version' => $remote_version,
+            'remote_size' => $remote_size,
+            'needs_update' => $needs_update,
+            'status' => $status
+        ));
         exit;
     }
 }
