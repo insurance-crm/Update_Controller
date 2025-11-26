@@ -154,7 +154,6 @@ jQuery(document).ready(function($) {
     // Toggle source method (URL vs Package)
     function toggleSourceMethod() {
         var method = $('#uc-source-method').val();
-        console.log('Toggle source method:', method);
         if (method === 'package') {
             $('#uc-source-url-fields').hide();
             $('#uc-source-package-fields').show();

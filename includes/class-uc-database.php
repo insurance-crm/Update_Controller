@@ -492,7 +492,10 @@ class UC_Database {
         // Get backup file path to delete
         $log = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id = %d", $log_id));
         if ($log && !empty($log->backup_file) && file_exists($log->backup_file)) {
-            @unlink($log->backup_file);
+            $deleted = unlink($log->backup_file);
+            if (!$deleted && defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Update Controller: Failed to delete backup file: ' . $log->backup_file);
+            }
         }
         
         return $wpdb->delete($table, array('id' => $log_id), array('%d'));

@@ -522,9 +522,8 @@ class UC_Companion {
         if (!file_exists($backup_dir)) {
             wp_mkdir_p($backup_dir);
             
-            // Add .htaccess to allow access
-            $htaccess = $backup_dir . '/.htaccess';
-            file_put_contents($htaccess, "# Allow access to backup files\nRequire all granted\n");
+            // Add index.php to prevent directory listing (more secure than .htaccess)
+            file_put_contents($backup_dir . '/index.php', '<?php // Silence is golden');
         }
         
         // Create backup ZIP file

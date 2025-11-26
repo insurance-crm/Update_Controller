@@ -190,12 +190,9 @@ class UC_Updater {
         $site_url = rtrim($site->site_url, '/');
         $password = UC_Encryption::decrypt($site->password);
         
-        $response = wp_remote_get($site_url . '/wp-json/uc-companion/v1/plugin-version', array(
+        $response = wp_remote_get($site_url . '/wp-json/uc-companion/v1/plugin-version?plugin_slug=' . urlencode($plugin_slug), array(
             'headers' => array(
                 'Authorization' => 'Basic ' . base64_encode($site->username . ':' . $password)
-            ),
-            'body' => array(
-                'plugin_slug' => $plugin_slug
             ),
             'timeout' => 30
         ));
@@ -226,10 +223,11 @@ class UC_Updater {
             return '';
         }
         
-        // Look for main plugin file in the ZIP
+        // Look for plugin files in the ZIP (any PHP file that might be the main file)
         for ($i = 0; $i < $zip->numFiles; $i++) {
             $filename = $zip->getNameIndex($i);
-            if (preg_match('/^[^\/]+\/[^\/]+\.php$/', $filename)) {
+            // Match any PHP file in the first two levels of the ZIP
+            if (preg_match('/^[^\/]+\/[^\/]*\.php$|^[^\/]+\.php$/', $filename)) {
                 $content = $zip->getFromIndex($i);
                 if (preg_match('/Version:\s*([0-9.]+)/i', $content, $matches)) {
                     $zip->close();

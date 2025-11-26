@@ -46,11 +46,7 @@
                         <td><?php echo esc_html($log->message ?: '-'); ?></td>
                         <td>
                             <?php if (!empty($log->backup_file) && file_exists($log->backup_file)) : ?>
-                                <?php 
-                                $upload_dir = wp_upload_dir();
-                                $backup_url = str_replace($upload_dir['basedir'], $upload_dir['baseurl'], $log->backup_file);
-                                ?>
-                                <a href="<?php echo esc_url($backup_url); ?>" class="button button-small" download>
+                                <a href="<?php echo esc_url(admin_url('admin-ajax.php?action=uc_download_backup&log_id=' . $log->id . '&nonce=' . wp_create_nonce('uc_download_backup_' . $log->id))); ?>" class="button button-small">
                                     <?php echo esc_html__('Download', 'update-controller'); ?>
                                 </a>
                             <?php else : ?>

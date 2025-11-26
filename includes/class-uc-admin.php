@@ -662,4 +662,48 @@ class UC_Admin {
                 return __('Unknown upload error', 'update-controller');
         }
     }
+    
+    /**
+     * AJAX: Secure backup file download
+     */
+    public static function ajax_download_backup() {
+        $log_id = isset($_GET['log_id']) ? intval($_GET['log_id']) : 0;
+        $nonce = isset($_GET['nonce']) ? sanitize_text_field($_GET['nonce']) : '';
+        
+        if (!wp_verify_nonce($nonce, 'uc_download_backup_' . $log_id)) {
+            wp_die(__('Security check failed', 'update-controller'));
+        }
+        
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have permission to download this file', 'update-controller'));
+        }
+        
+        global $wpdb;
+        $table = $wpdb->prefix . 'uc_update_logs';
+        $log = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id = %d", $log_id));
+        
+        if (!$log || empty($log->backup_file) || !file_exists($log->backup_file)) {
+            wp_die(__('Backup file not found', 'update-controller'));
+        }
+        
+        $file_path = $log->backup_file;
+        $file_name = basename($file_path);
+        
+        // Verify the file is in our backups directory
+        $upload_dir = wp_upload_dir();
+        $allowed_path = $upload_dir['basedir'] . '/update-controller/backups/';
+        if (strpos(realpath($file_path), realpath($allowed_path)) !== 0) {
+            wp_die(__('Invalid file path', 'update-controller'));
+        }
+        
+        // Serve the file
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="' . $file_name . '"');
+        header('Content-Length: ' . filesize($file_path));
+        header('Cache-Control: no-cache, must-revalidate');
+        header('Pragma: no-cache');
+        
+        readfile($file_path);
+        exit;
+    }
 }
