@@ -554,28 +554,101 @@ class UC_Admin {
      */
     private static function update_remote_companion($site, $file_content, $password) {
         $site_url = rtrim($site->site_url, '/');
+        $auth_header = 'Basic ' . base64_encode($site->username . ':' . $password);
         
+        // First try the direct update-companion endpoint (for v1.0.1+)
         $response = wp_remote_post($site_url . '/wp-json/uc-companion/v1/update-companion', array(
             'headers' => array(
-                'Authorization' => 'Basic ' . base64_encode($site->username . ':' . $password),
+                'Authorization' => $auth_header,
                 'Content-Type' => 'text/plain'
             ),
             'body' => $file_content,
             'timeout' => 60
         ));
         
-        if (is_wp_error($response)) {
-            return array('success' => false, 'message' => $response->get_error_message());
+        if (!is_wp_error($response)) {
+            $code = wp_remote_retrieve_response_code($response);
+            $body = json_decode(wp_remote_retrieve_body($response), true);
+            
+            if ($code === 200 && isset($body['success']) && $body['success']) {
+                return array('success' => true, 'message' => isset($body['message']) ? $body['message'] : '');
+            }
+            
+            // If 404, the endpoint doesn't exist - try fallback method
+            if ($code !== 404) {
+                return array('success' => false, 'message' => isset($body['message']) ? $body['message'] : 'Update failed with HTTP ' . $code);
+            }
         }
         
-        $code = wp_remote_retrieve_response_code($response);
-        $body = json_decode(wp_remote_retrieve_body($response), true);
+        // Fallback: Use upload-plugin + install-plugin for old companion versions
+        // Create a ZIP file with the companion plugin
+        $temp_zip = wp_tempnam('companion-update-') . '.zip';
+        $zip = new ZipArchive();
         
-        if ($code === 200 && isset($body['success']) && $body['success']) {
-            return array('success' => true, 'message' => isset($body['message']) ? $body['message'] : '');
+        if ($zip->open($temp_zip, ZipArchive::CREATE) !== true) {
+            return array('success' => false, 'message' => 'Failed to create temporary ZIP file');
         }
         
-        return array('success' => false, 'message' => isset($body['message']) ? $body['message'] : 'Unknown error');
+        // Add companion plugin to ZIP with proper directory structure
+        $zip->addFromString('update-controller-companion/update-controller-companion.php', $file_content);
+        $zip->close();
+        
+        $zip_content = file_get_contents($temp_zip);
+        @unlink($temp_zip);
+        
+        if (empty($zip_content)) {
+            return array('success' => false, 'message' => 'Failed to read ZIP file');
+        }
+        
+        // Step 1: Upload the ZIP file
+        $upload_response = wp_remote_post($site_url . '/wp-json/uc-companion/v1/upload-plugin', array(
+            'headers' => array(
+                'Authorization' => $auth_header,
+                'Content-Type' => 'application/octet-stream',
+                'Content-Disposition' => 'attachment; filename="update-controller-companion.zip"'
+            ),
+            'body' => $zip_content,
+            'timeout' => 60
+        ));
+        
+        if (is_wp_error($upload_response)) {
+            return array('success' => false, 'message' => 'Upload failed: ' . $upload_response->get_error_message());
+        }
+        
+        $upload_code = wp_remote_retrieve_response_code($upload_response);
+        $upload_body = json_decode(wp_remote_retrieve_body($upload_response), true);
+        
+        if ($upload_code !== 200 || !isset($upload_body['file_path'])) {
+            return array('success' => false, 'message' => 'Upload failed: ' . (isset($upload_body['message']) ? $upload_body['message'] : 'Unknown error'));
+        }
+        
+        $remote_file_path = $upload_body['file_path'];
+        
+        // Step 2: Install the uploaded plugin (this will overwrite the existing one)
+        $install_response = wp_remote_post($site_url . '/wp-json/uc-companion/v1/install-plugin', array(
+            'headers' => array(
+                'Authorization' => $auth_header,
+                'Content-Type' => 'application/json'
+            ),
+            'body' => json_encode(array(
+                'file_path' => $remote_file_path,
+                'overwrite' => true
+            )),
+            'timeout' => 60
+        ));
+        
+        if (is_wp_error($install_response)) {
+            return array('success' => false, 'message' => 'Install failed: ' . $install_response->get_error_message());
+        }
+        
+        $install_code = wp_remote_retrieve_response_code($install_response);
+        $install_body = json_decode(wp_remote_retrieve_body($install_response), true);
+        
+        if ($install_code === 200 && isset($install_body['success']) && $install_body['success']) {
+            return array('success' => true, 'message' => 'Companion plugin updated via install method');
+        }
+        
+        return array('success' => false, 'message' => isset($install_body['message']) ? $install_body['message'] : 'Install failed with HTTP ' . $install_code);
     }
     
     /**

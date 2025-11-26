@@ -179,7 +179,10 @@ jQuery(document).ready(function($) {
                     // Update version columns
                     var versionClass = data.needs_update ? 'version-mismatch' : 'version-match';
                     $row.find('.remote-version').html('<span class="' + versionClass + '">v' + data.remote_version + '</span>');
-                    $row.find('.remote-size').text(formatBytes(data.remote_size));
+                    
+                    // Show remote size - if 0, show "N/A (old version)"
+                    var remoteSizeText = data.remote_size > 0 ? formatBytes(data.remote_size) : 'N/A (old version)';
+                    $row.find('.remote-size').text(remoteSizeText);
                     
                     // Update status
                     var statusHtml = '';
