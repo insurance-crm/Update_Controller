@@ -98,6 +98,9 @@ class UC_Updater {
             );
         }
         
+        // Get current plugin version before update
+        $from_version = self::get_remote_plugin_version($site, $plugin->plugin_slug);
+        
         // Download plugin file from source
         if (defined('WP_DEBUG') && WP_DEBUG) {
             error_log('Update Controller: Step 0 - Downloading plugin from ' . $plugin->update_source);
@@ -109,6 +112,18 @@ class UC_Updater {
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log('Update Controller: Step 0 FAILED - Download error: ' . $plugin_file->get_error_message());
             }
+            
+            // Log the failed update
+            UC_Database::add_update_log(
+                $plugin->site_id,
+                $plugin_id,
+                $plugin->plugin_name,
+                $from_version,
+                '',
+                'failed',
+                $plugin_file->get_error_message()
+            );
+            
             return array(
                 'success' => false,
                 'message' => $plugin_file->get_error_message()
@@ -117,6 +132,15 @@ class UC_Updater {
         
         if (defined('WP_DEBUG') && WP_DEBUG) {
             error_log('Update Controller: Step 0 SUCCESS - Plugin downloaded to ' . $plugin_file);
+        }
+        
+        // Get the version from the downloaded package
+        $to_version = self::get_version_from_zip($plugin_file);
+        
+        // Create backup of the old plugin before updating
+        $backup_file = '';
+        if ($from_version) {
+            $backup_file = self::create_remote_backup($site, $plugin);
         }
         
         // Upload and install plugin on remote site
@@ -130,9 +154,152 @@ class UC_Updater {
         if ($result['success']) {
             UC_Database::update_plugin_last_update($plugin_id);
             UC_Database::update_site_last_update($plugin->site_id);
+            
+            // Log the successful update
+            UC_Database::add_update_log(
+                $plugin->site_id,
+                $plugin_id,
+                $plugin->plugin_name,
+                $from_version,
+                $to_version,
+                'success',
+                $result['message'],
+                $backup_file
+            );
+        } else {
+            // Log the failed update
+            UC_Database::add_update_log(
+                $plugin->site_id,
+                $plugin_id,
+                $plugin->plugin_name,
+                $from_version,
+                $to_version,
+                'failed',
+                $result['message'],
+                $backup_file
+            );
         }
         
         return $result;
+    }
+    
+    /**
+     * Get plugin version from remote site
+     */
+    private static function get_remote_plugin_version($site, $plugin_slug) {
+        $site_url = rtrim($site->site_url, '/');
+        $password = UC_Encryption::decrypt($site->password);
+        
+        $response = wp_remote_get($site_url . '/wp-json/uc-companion/v1/plugin-version?plugin_slug=' . urlencode($plugin_slug), array(
+            'headers' => array(
+                'Authorization' => 'Basic ' . base64_encode($site->username . ':' . $password)
+            ),
+            'timeout' => 30
+        ));
+        
+        if (is_wp_error($response)) {
+            return '';
+        }
+        
+        $code = wp_remote_retrieve_response_code($response);
+        if ($code !== 200) {
+            return '';
+        }
+        
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        return isset($body['version']) ? $body['version'] : '';
+    }
+    
+    /**
+     * Get version from ZIP file
+     */
+    private static function get_version_from_zip($zip_path) {
+        if (!class_exists('ZipArchive')) {
+            return '';
+        }
+        
+        $zip = new ZipArchive();
+        if ($zip->open($zip_path) !== true) {
+            return '';
+        }
+        
+        // Look for plugin files in the ZIP (any PHP file that might be the main file)
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $filename = $zip->getNameIndex($i);
+            // Match any PHP file in the first two levels of the ZIP
+            if (preg_match('/^[^\/]+\/[^\/]*\.php$|^[^\/]+\.php$/', $filename)) {
+                $content = $zip->getFromIndex($i);
+                if (preg_match('/Version:\s*([0-9.]+)/i', $content, $matches)) {
+                    $zip->close();
+                    return $matches[1];
+                }
+            }
+        }
+        
+        $zip->close();
+        return '';
+    }
+    
+    /**
+     * Create backup of plugin on remote site
+     */
+    private static function create_remote_backup($site, $plugin) {
+        $site_url = rtrim($site->site_url, '/');
+        $password = UC_Encryption::decrypt($site->password);
+        
+        $response = wp_remote_post($site_url . '/wp-json/uc-companion/v1/backup-plugin', array(
+            'headers' => array(
+                'Authorization' => 'Basic ' . base64_encode($site->username . ':' . $password)
+            ),
+            'body' => array(
+                'plugin_slug' => $plugin->plugin_slug
+            ),
+            'timeout' => 120
+        ));
+        
+        if (is_wp_error($response)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Update Controller: Backup request failed - ' . $response->get_error_message());
+            }
+            return '';
+        }
+        
+        $code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        
+        if ($code === 200 && isset($body['backup_url'])) {
+            // Download the backup file to local storage
+            $backup_url = $body['backup_url'];
+            $upload_dir = wp_upload_dir();
+            $backup_dir = $upload_dir['basedir'] . '/update-controller/backups';
+            
+            if (!file_exists($backup_dir)) {
+                wp_mkdir_p($backup_dir);
+            }
+            
+            $backup_filename = sanitize_file_name(
+                $site->site_name . '_' . 
+                str_replace('/', '-', $plugin->plugin_slug) . '_' . 
+                date('Y-m-d_H-i-s') . '.zip'
+            );
+            $backup_path = $backup_dir . '/' . $backup_filename;
+            
+            // Download backup file
+            $download_response = wp_remote_get($backup_url, array(
+                'timeout' => 120,
+                'stream' => true,
+                'filename' => $backup_path
+            ));
+            
+            if (!is_wp_error($download_response) && file_exists($backup_path)) {
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log('Update Controller: Backup saved to ' . $backup_path);
+                }
+                return $backup_path;
+            }
+        }
+        
+        return '';
     }
     
     /**

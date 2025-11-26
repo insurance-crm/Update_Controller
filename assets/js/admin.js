@@ -1,6 +1,9 @@
 jQuery(document).ready(function($) {
     'use strict';
     
+    console.log('Update Controller Admin JS loaded');
+    console.log('ucAdmin object:', typeof ucAdmin !== 'undefined' ? ucAdmin : 'NOT DEFINED');
+    
     // Sites Management
     var currentSiteId = null;
     
@@ -70,15 +73,10 @@ jQuery(document).ready(function($) {
     // Test connection
     $(document).on('click', '.uc-test-connection', function(e) {
         e.preventDefault();
-        console.log('Test connection button clicked');
         
         var siteId = $(this).data('id');
         var $button = $(this);
         var originalText = $button.text();
-        
-        console.log('Testing site ID:', siteId);
-        console.log('AJAX URL:', ucAdmin.ajaxUrl);
-        console.log('Nonce:', ucAdmin.nonce);
         
         $button.prop('disabled', true).text('Testing...');
         
@@ -91,20 +89,47 @@ jQuery(document).ready(function($) {
                 site_id: siteId
             },
             success: function(response) {
-                console.log('Test response:', response);
                 if (response.success) {
-                    alert('Connection Test Successful!\n\n' + response.data.message + 
-                          '\n\nDetails:\n' +
-                          'Companion Plugin: ' + response.data.details.companion_status + '\n' +
-                          'Authentication: ' + response.data.details.auth_status + '\n' +
-                          'WordPress Version: ' + (response.data.details.wp_version || 'unknown'));
+                    var details = response.data.details;
+                    var remoteVersion = details.companion_version || 'unknown';
+                    var localVersion = details.local_companion_version || 'unknown';
+                    
+                    var message = 'Connection Test Successful!\n\n' + response.data.message + 
+                          '\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
+                          'Companion Plugin Status: ' + details.companion_status + '\n' +
+                          'Remote Site Version: v' + remoteVersion + '\n' +
+                          'Server Version: v' + localVersion + '\n' +
+                          'Authentication: ' + details.auth_status + '\n' +
+                          'WordPress Version: ' + (details.wp_version || 'unknown') +
+                          '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
+                    
+                    // Check if companion plugin needs update
+                    if (details.companion_needs_update) {
+                        var updateConfirm = confirm(
+                            message + '\n\n' +
+                            '⚠️ WARNING: Companion plugin needs update!\n' +
+                            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
+                            'Remote site has: v' + remoteVersion + '\n' +
+                            'Server has: v' + localVersion + '\n' +
+                            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n' +
+                            'Click OK to update the companion plugin on the remote site.\n' +
+                            'Click Cancel to skip the update.'
+                        );
+                        
+                        if (updateConfirm) {
+                            // Update companion plugin
+                            updateCompanionPlugin(siteId, $button, originalText);
+                            return;
+                        }
+                    } else {
+                        alert(message + '\n\n✓ Companion plugin is up to date.');
+                    }
                 } else {
                     alert('Connection Test Failed!\n\n' + response.data.message +
                           (response.data.details ? '\n\nDetails:\n' + JSON.stringify(response.data.details, null, 2) : ''));
                 }
             },
             error: function(xhr, status, error) {
-                console.log('Test error:', xhr, status, error);
                 alert('Connection Test Error!\n\nFailed to connect to server: ' + error);
             },
             complete: function() {
@@ -112,6 +137,136 @@ jQuery(document).ready(function($) {
             }
         });
     });
+    
+    // Update companion plugin on remote site
+    function updateCompanionPlugin(siteId, $button, originalText) {
+        $button.prop('disabled', true).text('Updating...');
+        
+        $.ajax({
+            url: ucAdmin.ajaxUrl,
+            type: 'POST',
+            data: {
+                action: 'uc_update_companion',
+                nonce: ucAdmin.nonce,
+                site_id: siteId
+            },
+            success: function(response) {
+                if (response.success) {
+                    alert('✓ Companion Plugin Updated Successfully!\n\n' + response.data.message);
+                } else {
+                    alert('Companion Plugin Update Failed!\n\n' + response.data.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                alert('Update Error!\n\nFailed to update companion plugin: ' + error);
+            },
+            complete: function() {
+                $button.prop('disabled', false).text(originalText);
+            }
+        });
+    }
+    
+    // Check All Sites button - use document delegation for reliability
+    $(document).on('click', '#uc-check-all-sites-btn', function(e) {
+        e.preventDefault();
+        console.log('Check All Sites button clicked');
+        
+        var $button = $(this);
+        var $rows = $('#uc-sites-table tbody tr[data-site-id]');
+        var total = $rows.length;
+        var completed = 0;
+        
+        console.log('Found ' + total + ' sites to check');
+        
+        if (total === 0) {
+            alert('No sites to check.');
+            return;
+        }
+        
+        $button.prop('disabled', true).text('Checking...');
+        
+        $rows.each(function(index) {
+            var $row = $(this);
+            var siteId = $row.data('site-id');
+            
+            console.log('Preparing to check site ID: ' + siteId);
+            
+            // Set loading state
+            $row.find('.uc-connection-status').html('<span class="uc-status">Checking...</span>');
+            $row.find('.uc-companion-version').text('...');
+            $row.find('.uc-insurance-crm-version').text('...');
+            
+            // Delay each request slightly to avoid overwhelming the server
+            setTimeout(function() {
+                console.log('Checking site ID: ' + siteId);
+                checkSiteStatus(siteId, $row, function() {
+                    completed++;
+                    console.log('Completed ' + completed + ' of ' + total);
+                    if (completed >= total) {
+                        $button.prop('disabled', false).text('Check All Sites');
+                    }
+                });
+            }, index * 500); // Increased delay for better server handling
+        });
+    });
+    
+    // Function to check a single site status
+    function checkSiteStatus(siteId, $row, callback) {
+        console.log('checkSiteStatus called for site ID:', siteId);
+        console.log('AJAX URL:', ucAdmin.ajaxUrl);
+        console.log('Nonce:', ucAdmin.nonce);
+        
+        $.ajax({
+            url: ucAdmin.ajaxUrl,
+            type: 'POST',
+            data: {
+                action: 'uc_check_site_status',
+                nonce: ucAdmin.nonce,
+                site_id: siteId
+            },
+            success: function(response) {
+                console.log('Site status response for site ' + siteId + ':', response);
+                if (response.success) {
+                    var data = response.data;
+                    
+                    // Update connection status
+                    var statusClass = data.connection_status === 'active' ? 'uc-status-active' : 'uc-status-error';
+                    var statusText = data.connection_status === 'active' ? 'active' : 'error';
+                    $row.find('.uc-connection-status').html('<span class="uc-status ' + statusClass + '">' + statusText + '</span>');
+                    
+                    // Update companion version
+                    var companionHtml = data.companion_version || 'N/A';
+                    if (data.companion_version && data.companion_version !== data.local_companion_version && data.companion_version !== 'N/A') {
+                        companionHtml = '<span style="color: #d63638;">' + data.companion_version + '</span>';
+                    } else if (data.companion_version && data.companion_version === data.local_companion_version) {
+                        companionHtml = '<span style="color: #00a32a;">' + data.companion_version + '</span>';
+                    }
+                    $row.find('.uc-companion-version').html(companionHtml);
+                    
+                    // Update Insurance CRM version
+                    $row.find('.uc-insurance-crm-version').text(data.insurance_crm_version || 'N/A');
+                } else {
+                    console.log('Site status error for site ' + siteId + ':', response.data);
+                    $row.find('.uc-connection-status').html('<span class="uc-status uc-status-error">error</span>');
+                    $row.find('.uc-companion-version').text('N/A');
+                    $row.find('.uc-insurance-crm-version').text('N/A');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.log('AJAX error for site ' + siteId + ':', status, error);
+                console.log('Response text:', xhr.responseText);
+                $row.find('.uc-connection-status').html('<span class="uc-status uc-status-error">error</span>');
+                $row.find('.uc-companion-version').text('N/A');
+                $row.find('.uc-insurance-crm-version').text('N/A');
+            },
+            complete: function() {
+                console.log('AJAX complete for site ' + siteId);
+                if (typeof callback === 'function') {
+                    callback();
+                }
+            }
+        });
+    }
     
     // Submit site form
     $('#uc-site-form').on('submit', function(e) {
@@ -164,6 +319,11 @@ jQuery(document).ready(function($) {
             $('#uc-update-source').prop('required', true);
         }
     }
+    
+    // Use both direct binding and event delegation for source method toggle
+    $('#uc-source-method').on('change', function() {
+        toggleSourceMethod();
+    });
     
     $(document).on('change', '#uc-source-method', function() {
         toggleSourceMethod();

@@ -3,7 +3,7 @@
  * Plugin Name: Update Controller Companion
  * Plugin URI: https://github.com/insurance-crm/Update_Controller
  * Description: Companion plugin for Update Controller - allows remote plugin updates via REST API.
- * Version: 1.0.0
+ * Version: 1.0.2
  * Author: Insurance CRM
  * Author URI: https://github.com/insurance-crm
  * License: GPL v2 or later
@@ -20,6 +20,11 @@ if (!defined('ABSPATH')) {
  * Update Controller Companion Class
  */
 class UC_Companion {
+    
+    /**
+     * Plugin version - must match the Version in plugin header
+     */
+    const VERSION = '1.0.2';
     
     /**
      * Initialize the companion plugin
@@ -66,6 +71,27 @@ class UC_Companion {
             'callback' => array(__CLASS__, 'deactivate_plugin'),
             'permission_callback' => array(__CLASS__, 'check_permission')
         ));
+        
+        // Get plugin version endpoint
+        register_rest_route('uc-companion/v1', '/plugin-version', array(
+            'methods' => 'GET',
+            'callback' => array(__CLASS__, 'get_plugin_version'),
+            'permission_callback' => array(__CLASS__, 'check_permission')
+        ));
+        
+        // Backup plugin endpoint
+        register_rest_route('uc-companion/v1', '/backup-plugin', array(
+            'methods' => 'POST',
+            'callback' => array(__CLASS__, 'backup_plugin'),
+            'permission_callback' => array(__CLASS__, 'check_permission')
+        ));
+        
+        // Update companion plugin endpoint
+        register_rest_route('uc-companion/v1', '/update-companion', array(
+            'methods' => 'POST',
+            'callback' => array(__CLASS__, 'update_companion'),
+            'permission_callback' => array(__CLASS__, 'check_permission')
+        ));
     }
     
     /**
@@ -75,9 +101,11 @@ class UC_Companion {
         return array(
             'success' => true,
             'message' => 'Update Controller Companion is active and ready',
-            'version' => '1.0.0',
+            'version' => self::VERSION,
             'wp_version' => get_bloginfo('version'),
-            'site_url' => get_site_url()
+            'site_url' => get_site_url(),
+            'plugin_file' => __FILE__,
+            'file_size' => filesize(__FILE__)
         );
     }
     
@@ -451,6 +479,183 @@ class UC_Companion {
         return array(
             'success' => true,
             'message' => __('Plugin deactivated successfully', 'update-controller-companion')
+        );
+    }
+    
+    /**
+     * Get plugin version
+     */
+    public static function get_plugin_version($request) {
+        $plugin_slug = $request->get_param('plugin_slug');
+        
+        if (empty($plugin_slug)) {
+            return new WP_Error('missing_param', __('Missing plugin_slug parameter', 'update-controller-companion'), array('status' => 400));
+        }
+        
+        // Include required WordPress files
+        require_once(ABSPATH . 'wp-admin/includes/plugin.php');
+        
+        $plugin_file = WP_PLUGIN_DIR . '/' . $plugin_slug;
+        
+        if (!file_exists($plugin_file)) {
+            return new WP_Error('not_found', __('Plugin not found', 'update-controller-companion'), array('status' => 404));
+        }
+        
+        $plugin_data = get_plugin_data($plugin_file);
+        
+        return array(
+            'success' => true,
+            'version' => isset($plugin_data['Version']) ? $plugin_data['Version'] : '',
+            'name' => isset($plugin_data['Name']) ? $plugin_data['Name'] : '',
+            'plugin_slug' => $plugin_slug
+        );
+    }
+    
+    /**
+     * Backup plugin before update
+     */
+    public static function backup_plugin($request) {
+        $plugin_slug = $request->get_param('plugin_slug');
+        
+        if (empty($plugin_slug)) {
+            return new WP_Error('missing_param', __('Missing plugin_slug parameter', 'update-controller-companion'), array('status' => 400));
+        }
+        
+        // Get plugin directory name from slug (e.g., "my-plugin/my-plugin.php" -> "my-plugin")
+        $plugin_dir = dirname($plugin_slug);
+        $plugin_path = WP_PLUGIN_DIR . '/' . $plugin_dir;
+        
+        if (!file_exists($plugin_path) || !is_dir($plugin_path)) {
+            return new WP_Error('not_found', __('Plugin directory not found', 'update-controller-companion'), array('status' => 404));
+        }
+        
+        // Create backup directory
+        $upload_dir = wp_upload_dir();
+        $backup_dir = $upload_dir['basedir'] . '/uc-backups';
+        
+        if (!file_exists($backup_dir)) {
+            wp_mkdir_p($backup_dir);
+            
+            // Add index.php to prevent directory listing (more secure than .htaccess)
+            file_put_contents($backup_dir . '/index.php', '<?php // Silence is golden');
+        }
+        
+        // Create backup ZIP file
+        $backup_filename = $plugin_dir . '_backup_' . date('Y-m-d_H-i-s') . '.zip';
+        $backup_path = $backup_dir . '/' . $backup_filename;
+        
+        if (!class_exists('ZipArchive')) {
+            return new WP_Error('zip_error', __('ZipArchive not available on server', 'update-controller-companion'), array('status' => 500));
+        }
+        
+        $zip = new ZipArchive();
+        if ($zip->open($backup_path, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            return new WP_Error('zip_error', __('Failed to create backup ZIP file', 'update-controller-companion'), array('status' => 500));
+        }
+        
+        // Add plugin files to ZIP
+        $files = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($plugin_path),
+            RecursiveIteratorIterator::LEAVES_ONLY
+        );
+        
+        foreach ($files as $file) {
+            if (!$file->isDir()) {
+                $file_path = $file->getRealPath();
+                $relative_path = $plugin_dir . '/' . substr($file_path, strlen($plugin_path) + 1);
+                $zip->addFile($file_path, $relative_path);
+            }
+        }
+        
+        $zip->close();
+        
+        // Generate backup URL
+        $backup_url = $upload_dir['baseurl'] . '/uc-backups/' . $backup_filename;
+        
+        return array(
+            'success' => true,
+            'message' => __('Plugin backed up successfully', 'update-controller-companion'),
+            'backup_file' => $backup_path,
+            'backup_url' => $backup_url,
+            'file_size' => filesize($backup_path)
+        );
+    }
+    
+    /**
+     * Update companion plugin
+     */
+    public static function update_companion($request) {
+        $file_content = $request->get_body();
+        
+        if (empty($file_content)) {
+            return new WP_Error('missing_content', __('Missing plugin file content', 'update-controller-companion'), array('status' => 400));
+        }
+        
+        // Basic validation - ensure this looks like PHP
+        if (strpos($file_content, '<?php') === false) {
+            return new WP_Error('invalid_content', __('Invalid plugin file content - not a PHP file', 'update-controller-companion'), array('status' => 400));
+        }
+        
+        // Get current plugin file path
+        $current_file = __FILE__;
+        $old_version = self::VERSION;
+        
+        // Check if file is writable
+        if (!is_writable($current_file)) {
+            $perms = substr(sprintf('%o', fileperms($current_file)), -4);
+            return new WP_Error('not_writable', 
+                sprintf(__('Companion plugin file is not writable. Current permissions: %s', 'update-controller-companion'), $perms), 
+                array('status' => 500));
+        }
+        
+        // Create backup of current file
+        $backup_file = $current_file . '.backup.' . time();
+        if (!copy($current_file, $backup_file)) {
+            return new WP_Error('backup_failed', __('Failed to create backup of current companion plugin', 'update-controller-companion'), array('status' => 500));
+        }
+        
+        // Write new content
+        $bytes_written = @file_put_contents($current_file, $file_content);
+        
+        if ($bytes_written === false) {
+            // Restore from backup with error checking
+            $restored = @copy($backup_file, $current_file);
+            if ($restored) {
+                @unlink($backup_file);
+            }
+            return new WP_Error('write_failed', __('Failed to update companion plugin. Backup restored.', 'update-controller-companion'), array('status' => 500));
+        }
+        
+        // Basic PHP syntax validation - check for common errors without shell_exec
+        // shell_exec may not be available on all servers
+        $new_file_content = file_get_contents($current_file);
+        
+        // Check if the file still contains necessary markers
+        if (strpos($new_file_content, 'Plugin Name:') === false || 
+            strpos($new_file_content, 'class UC_Companion') === false) {
+            // Restore from backup if file seems corrupted
+            $restored = @copy($backup_file, $current_file);
+            if ($restored) {
+                @unlink($backup_file);
+            }
+            return new WP_Error('invalid_php', __('Updated file appears to be invalid or corrupted. Backup restored.', 'update-controller-companion'), array('status' => 500));
+        }
+        
+        // Get new version from updated file
+        preg_match('/Version:\s*([0-9.]+)/i', $new_file_content, $matches);
+        $new_version = isset($matches[1]) ? $matches[1] : 'unknown';
+        
+        // Remove backup file only after successful update
+        if (file_exists($backup_file)) {
+            @unlink($backup_file);
+        }
+        
+        return array(
+            'success' => true,
+            'message' => __('Companion plugin updated successfully', 'update-controller-companion'),
+            'old_version' => $old_version,
+            'new_version' => $new_version,
+            'bytes_written' => $bytes_written
         );
     }
 }
