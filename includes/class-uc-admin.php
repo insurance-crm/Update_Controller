@@ -671,7 +671,33 @@ class UC_Admin {
         error_log('Update Controller: Companion install response - Code: ' . $install_code . ', Body: ' . print_r($install_body, true));
         
         if ($install_code === 200 && isset($install_body['success']) && $install_body['success']) {
-            return array('success' => true, 'message' => 'Companion plugin updated via install method');
+            // Verify the update actually worked by checking the version again
+            sleep(1); // Brief pause to let any file caching clear
+            $verify_response = wp_remote_get($site_url . '/wp-json/uc-companion/v1/test', array('timeout' => 10));
+            
+            if (!is_wp_error($verify_response) && wp_remote_retrieve_response_code($verify_response) === 200) {
+                $verify_data = json_decode(wp_remote_retrieve_body($verify_response), true);
+                $new_remote_version = isset($verify_data['version']) ? $verify_data['version'] : 'unknown';
+                
+                // Extract local version from file content
+                preg_match('/Version:\s*([0-9.]+)/i', $file_content, $local_matches);
+                $expected_version = isset($local_matches[1]) ? $local_matches[1] : '0.0.0';
+                
+                error_log("Update Controller: Verification - Expected version: $expected_version, Got: $new_remote_version");
+                
+                if ($new_remote_version === $expected_version) {
+                    return array('success' => true, 'message' => 'Companion plugin updated via install method (verified)');
+                } else {
+                    // Version didn't change - update might have failed silently
+                    return array(
+                        'success' => false, 
+                        'message' => "Install reported success but version unchanged (expected v$expected_version, got v$new_remote_version). The old companion may not be able to update itself. Please manually update the companion plugin on the remote site."
+                    );
+                }
+            }
+            
+            // Couldn't verify, but install reported success
+            return array('success' => true, 'message' => 'Companion plugin updated via install method (unverified)');
         }
         
         // Add more detailed error message
