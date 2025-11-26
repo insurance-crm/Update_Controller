@@ -393,7 +393,7 @@ class UC_Admin {
         $test_data = json_decode($test_body, true);
         $companion_needs_update = false;
         $local_version = '0.0.0';
-        $remote_version = isset($test_data['version']) ? $test_data['version'] : '0.0.0';
+        $remote_version = isset($test_data['version']) && !empty($test_data['version']) ? $test_data['version'] : 'unknown';
         
         // Check if companion plugin needs update
         $local_companion_file = UPDATE_CONTROLLER_PLUGIN_DIR . 'companion-plugin/update-controller-companion.php';
@@ -405,11 +405,14 @@ class UC_Admin {
             preg_match('/Version:\s*([0-9.]+)/i', $local_content, $local_matches);
             $local_version = isset($local_matches[1]) ? $local_matches[1] : '0.0.0';
             
-            $remote_size = isset($test_data['file_size']) ? $test_data['file_size'] : 0;
+            $remote_size = isset($test_data['file_size']) ? intval($test_data['file_size']) : 0;
             
             // Compare versions and sizes - check if local (server) version is newer or different
             // local = Update Controller server, remote = target WordPress site
-            if (version_compare($local_version, $remote_version, '>') || ($local_size != $remote_size && $local_version === $remote_version)) {
+            // If remote version is unknown, it's an old companion that needs update
+            if ($remote_version === 'unknown' || 
+                version_compare($local_version, $remote_version, '>') || 
+                ($local_size != $remote_size && version_compare($local_version, $remote_version, '='))) {
                 $companion_needs_update = true;
             }
         }

@@ -88,21 +88,29 @@ jQuery(document).ready(function($) {
             success: function(response) {
                 if (response.success) {
                     var details = response.data.details;
+                    var remoteVersion = details.companion_version || 'unknown';
+                    var localVersion = details.local_companion_version || 'unknown';
+                    
                     var message = 'Connection Test Successful!\n\n' + response.data.message + 
-                          '\n\nDetails:\n' +
-                          'Companion Plugin: ' + details.companion_status + '\n' +
-                          'Remote Version: v' + details.companion_version + '\n' +
-                          'Local Version: v' + details.local_companion_version + '\n' +
+                          '\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
+                          'Companion Plugin Status: ' + details.companion_status + '\n' +
+                          'Remote Site Version: v' + remoteVersion + '\n' +
+                          'Server Version: v' + localVersion + '\n' +
                           'Authentication: ' + details.auth_status + '\n' +
-                          'WordPress Version: ' + (details.wp_version || 'unknown');
+                          'WordPress Version: ' + (details.wp_version || 'unknown') +
+                          '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
                     
                     // Check if companion plugin needs update
                     if (details.companion_needs_update) {
                         var updateConfirm = confirm(
                             message + '\n\n' +
-                            '⚠️ WARNING: Companion plugin version mismatch detected!\n' +
-                            'Remote site has v' + details.companion_version + ' but server has v' + details.local_companion_version + '\n\n' +
-                            'Do you want to update the companion plugin on the remote site?'
+                            '⚠️ WARNING: Companion plugin needs update!\n' +
+                            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
+                            'Remote site has: v' + remoteVersion + '\n' +
+                            'Server has: v' + localVersion + '\n' +
+                            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n' +
+                            'Click OK to update the companion plugin on the remote site.\n' +
+                            'Click Cancel to skip the update.'
                         );
                         
                         if (updateConfirm) {
@@ -111,7 +119,7 @@ jQuery(document).ready(function($) {
                             return;
                         }
                     } else {
-                        alert(message);
+                        alert(message + '\n\n✓ Companion plugin is up to date.');
                     }
                 } else {
                     alert('Connection Test Failed!\n\n' + response.data.message +
