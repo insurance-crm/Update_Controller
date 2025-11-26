@@ -3,7 +3,7 @@
  * Plugin Name: Update Controller
  * Plugin URI: https://github.com/insurance-crm/Update_Controller
  * Description: Manages automatic updates for plugins across multiple WordPress sites from specified web or GitHub repository sources.
- * Version: 1.0.0
+ * Version: 1.0.2
  * Author: Insurance CRM
  * Author URI: https://github.com/insurance-crm
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('UPDATE_CONTROLLER_VERSION', '1.0.0');
+define('UPDATE_CONTROLLER_VERSION', '1.0.2');
 define('UPDATE_CONTROLLER_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('UPDATE_CONTROLLER_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('UPDATE_CONTROLLER_PLUGIN_FILE', __FILE__);

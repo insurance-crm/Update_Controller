@@ -1,6 +1,9 @@
 jQuery(document).ready(function($) {
     'use strict';
     
+    console.log('Update Controller Admin JS loaded');
+    console.log('ucAdmin object:', typeof ucAdmin !== 'undefined' ? ucAdmin : 'NOT DEFINED');
+    
     // Sites Management
     var currentSiteId = null;
     
@@ -163,12 +166,17 @@ jQuery(document).ready(function($) {
         });
     }
     
-    // Check All Sites button
-    $('#uc-check-all-sites-btn').on('click', function() {
+    // Check All Sites button - use document delegation for reliability
+    $(document).on('click', '#uc-check-all-sites-btn', function(e) {
+        e.preventDefault();
+        console.log('Check All Sites button clicked');
+        
         var $button = $(this);
         var $rows = $('#uc-sites-table tbody tr[data-site-id]');
         var total = $rows.length;
         var completed = 0;
+        
+        console.log('Found ' + total + ' sites to check');
         
         if (total === 0) {
             alert('No sites to check.');
@@ -181,6 +189,8 @@ jQuery(document).ready(function($) {
             var $row = $(this);
             var siteId = $row.data('site-id');
             
+            console.log('Preparing to check site ID: ' + siteId);
+            
             // Set loading state
             $row.find('.uc-connection-status').html('<span class="uc-status">Checking...</span>');
             $row.find('.uc-companion-version').text('...');
@@ -188,19 +198,24 @@ jQuery(document).ready(function($) {
             
             // Delay each request slightly to avoid overwhelming the server
             setTimeout(function() {
+                console.log('Checking site ID: ' + siteId);
                 checkSiteStatus(siteId, $row, function() {
                     completed++;
+                    console.log('Completed ' + completed + ' of ' + total);
                     if (completed >= total) {
                         $button.prop('disabled', false).text('Check All Sites');
                     }
                 });
-            }, index * 300);
+            }, index * 500); // Increased delay for better server handling
         });
     });
     
     // Function to check a single site status
     function checkSiteStatus(siteId, $row, callback) {
-        console.log('Checking site status for site ID:', siteId);
+        console.log('checkSiteStatus called for site ID:', siteId);
+        console.log('AJAX URL:', ucAdmin.ajaxUrl);
+        console.log('Nonce:', ucAdmin.nonce);
+        
         $.ajax({
             url: ucAdmin.ajaxUrl,
             type: 'POST',
@@ -210,7 +225,7 @@ jQuery(document).ready(function($) {
                 site_id: siteId
             },
             success: function(response) {
-                console.log('Site status response:', response);
+                console.log('Site status response for site ' + siteId + ':', response);
                 if (response.success) {
                     var data = response.data;
                     
@@ -220,28 +235,32 @@ jQuery(document).ready(function($) {
                     $row.find('.uc-connection-status').html('<span class="uc-status ' + statusClass + '">' + statusText + '</span>');
                     
                     // Update companion version
-                    var companionHtml = data.companion_version;
-                    if (data.companion_version !== data.local_companion_version && data.companion_version !== 'N/A') {
+                    var companionHtml = data.companion_version || 'N/A';
+                    if (data.companion_version && data.companion_version !== data.local_companion_version && data.companion_version !== 'N/A') {
                         companionHtml = '<span style="color: #d63638;">' + data.companion_version + '</span>';
-                    } else if (data.companion_version === data.local_companion_version) {
+                    } else if (data.companion_version && data.companion_version === data.local_companion_version) {
                         companionHtml = '<span style="color: #00a32a;">' + data.companion_version + '</span>';
                     }
                     $row.find('.uc-companion-version').html(companionHtml);
                     
                     // Update Insurance CRM version
-                    $row.find('.uc-insurance-crm-version').text(data.insurance_crm_version);
+                    $row.find('.uc-insurance-crm-version').text(data.insurance_crm_version || 'N/A');
                 } else {
+                    console.log('Site status error for site ' + siteId + ':', response.data);
                     $row.find('.uc-connection-status').html('<span class="uc-status uc-status-error">error</span>');
                     $row.find('.uc-companion-version').text('N/A');
                     $row.find('.uc-insurance-crm-version').text('N/A');
                 }
             },
-            error: function() {
+            error: function(xhr, status, error) {
+                console.log('AJAX error for site ' + siteId + ':', status, error);
+                console.log('Response text:', xhr.responseText);
                 $row.find('.uc-connection-status').html('<span class="uc-status uc-status-error">error</span>');
                 $row.find('.uc-companion-version').text('N/A');
                 $row.find('.uc-insurance-crm-version').text('N/A');
             },
             complete: function() {
+                console.log('AJAX complete for site ' + siteId);
                 if (typeof callback === 'function') {
                     callback();
                 }
